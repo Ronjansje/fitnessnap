@@ -162,8 +162,8 @@ if st.sidebar.button("🔒 Uitloggen op dit apparaat"):
     st.rerun()
 
 # --- HOOFDMENU TABS ---
-tab_dash, tab_food, tab_water, tab_kaak, tab_schema, tab_zondag, tab_account = st.tabs([
-    "📊 Dashboard", "📸 Foto Scanner", "💧 Water Tracker", "🗿 Kaaklijn Trainer", "🏋️ Lichaamsgewicht Schema", "📅 Zondag & 40 Badges", "⚙️ Account & Doelen"
+tab_dash, tab_food, tab_water, tab_kaak, tab_schema, tab_progress, tab_zondag, tab_account = st.tabs([
+    "📊 Dashboard", "📸 Foto Scanner", "💧 Water Tracker", "🗿 Kaaklijn Trainer", "🏋️ Lichaamsgewicht Schema", "📈 Voortgang & Metingen", "📅 Zondag & 40 Badges", "⚙️ Account & Doelen"
 ])
 
 # TAB 1: DASHBOARD
@@ -242,6 +242,7 @@ with tab_kaak:
             st.success("Database geüpdatet! Streak verhoogd.")
             st.rerun()
         else: st.warning("Je hebt vandaag al getraind!")
+
 # TAB 5: SLIM RECOVERY SCHEMA
 with tab_schema:
     st.subheader("🏋️ Dagelijks Lichaamsgewicht Schema")
@@ -277,7 +278,79 @@ with tab_schema:
             else:
                 st.warning("Je hebt vandaag al getraind!")
 
-# TAB 6: ZONDAG METING & 40 BADGES
+# TAB 6: VOORTGANG & METINGEN (NEW TAB)
+with tab_progress:
+    st.subheader("📈 Voortgang & Metingen Overzicht")
+    
+    # Display diagrams
+    st.write("---")
+    st.subheader("📊 Voortgangsdiagrammen")
+    col_g1, col_g2 = st.columns(2)
+    with col_g1:
+        if weight_history:
+            st.write("### Gewichtstrend (kg)")
+            st.line_chart(pd.DataFrame(weight_history).set_index("Datum"))
+        else:
+            st.info("Nog geen gewichtgeschiedenis. Voeg metingen toe in het 'Zondag & 40 Badges' tabblad.")
+    with col_g2:
+        if max_history:
+            st.write("### Kracht Voortgang (Reps)")
+            st.line_chart(pd.DataFrame(max_history).set_index("Datum"))
+        else:
+            st.info("Nog geen krachtvoortgang. Voeg metingen toe in het 'Zondag & 40 Badges' tabblad.")
+    
+    # Sunday measurements section
+    st.write("---")
+    st.subheader("📅 Zondagse Metingen Invoeren")
+    st.info("📝 Voeg je huidige metingen hier in om je voortgang bij te houden!")
+    
+    nieuw_gewicht = st.number_input("Gewicht deze week (kg)", min_value=30.0, value=u_data["gewicht"], key="progress_weight")
+    
+    st.write("### 🏅 Vul je nieuwe MAX in één set in:")
+    col_m1, col_m2 = st.columns(2)
+    with col_m1:
+        c_ups = st.number_input("Max Chin-ups", min_value=0, value=5, key="progress_chups")
+        p_squats = st.number_input("Max Pistol Squats", min_value=0, value=5, key="progress_psquats")
+    with col_m2:
+        p_ups = st.number_input("Max Push-ups", min_value=0, value=20, key="progress_pups")
+        s_ups = st.number_input("Max Sit-ups", min_value=0, value=15, key="progress_sups")
+    
+    if st.button("💾 Sla metingen op", key="save_progress"):
+        datum_str = vandaag_datum.strftime("%d-%m")
+        weight_history.append({"Datum": datum_str, "Gewicht": nieuw_gewicht})
+        max_history.append({"Datum": datum_str, "Chin-ups": c_ups, "Push-ups": p_ups, "Pistol Squats": p_squats, "Sit-ups": s_ups})
+        
+        update_user_db(username, {
+            "weight_history": json.dumps(weight_history),
+            "max_history": json.dumps(max_history),
+            "gewicht": nieuw_gewicht
+        })
+        st.success("✅ Metingen permanent opgeslagen!")
+        st.rerun()
+    
+    # Badge section
+    def get_10_tier_badge(reps):
+        if reps >= 100: return "👑 Lvl 10: God Mode (100+)"
+        elif reps >= 80: return "👹 Lvl 9: Demonic Strength (80+)"
+        elif reps >= 65: return "🔱 Lvl 8: Mythical Chad (65+)"
+        elif reps >= 50: return "🏆 Lvl 7: Elite Athlete (50+)"
+        elif reps >= 40: return "🥇 Lvl 6: Master (40+)"
+        elif reps >= 30: return "🥈 Lvl 5: Advanced (30+)"
+        elif reps >= 20: return "🥉 Lvl 4: Warrior (20+)"
+        elif reps >= 10: return "✨ Lvl 3: Gym Goer (10+)"
+        elif reps >= 5:  return "🌱 Lvl 2: Beginner (5+)"
+        elif reps >= 1:  return "👟 Lvl 1: Starter (1+)"
+        return "🔒 Lvl 0: Geen Badge"
+
+    st.write("---")
+    st.write("### 🏆 Jouw Huidige Badge Niveaus:")
+    col_b1, col_b2, col_b3, col_b4 = st.columns(4)
+    with col_b1: st.metric("Chin-ups", get_10_tier_badge(c_ups))
+    with col_b2: st.metric("Push-ups", get_10_tier_badge(p_ups))
+    with col_b3: st.metric("Pistol Squats", get_10_tier_badge(p_squats))
+    with col_b4: st.metric("Sit-ups", get_10_tier_badge(s_ups))
+
+# TAB 7: ZONDAG METING & 40 BADGES
 with tab_zondag:
     st.subheader("📅 Zondagse Voortgang & Het 40-Badge Systeem")
     nieuw_gewicht = st.number_input("Gewicht deze zondag (kg)", min_value=30.0, value=u_data["gewicht"])
@@ -321,7 +394,7 @@ with tab_zondag:
     with col_b3: st.metric("Pistol Squats", get_10_tier_badge(p_squats))
     with col_b4: st.metric("Sit-ups", get_10_tier_badge(s_ups))
 
-# TAB 7: ACCOUNT & DOELEN BEHEREN
+# TAB 8: ACCOUNT & DOELEN BEHEREN
 with tab_account:
     st.subheader("⚙️ Accountinstellingen")
     with st.form("account_form"):

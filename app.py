@@ -242,6 +242,101 @@ with tab_kaak:
             st.success("Database geüpdatet! Streak verhoogd.")
             st.rerun()
         else: st.warning("Je hebt vandaag al getraind!")
-
 # TAB 5: SLIM RECOVERY SCHEMA
-st.subheader("🏋️ Dagelijks Lichaamsgewicht Schema")laatste_max = max_history[-1] if max_history else {"Chin-ups": 5, "Push-ups": 20, "Pistol Squats": 5, "Sit-ups": 15}dagen_van_week = ["Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag"]vandaag_dag = dagen_van_week[vandaag_datum.weekday()]st.warning(f"📆 Huidige trainingsdag: {vandaag_dag}")if vandaag_dag in ["Maandag", "Donderdag"]:st.write(f"- Push-ups: 4 sets van {max(1, int(laatste_max['Push-ups'] * 0.7))} herhalingen")elif vandaag_dag in ["Dinsdag", "Vrijdag"]:st.write(f"- Chin-ups: 4 sets van {max(1, int(laatste_max['Chin-ups'] * 0.7))} herhalingen")elif vandaag_dag in ["Woensdag", "Zaterdag"]:st.write(f"- Pistol Squats: 4 sets van {max(1, int(laatste_max['Pistol Squats'] * 0.7))} herhalingen")elif vandaag_dag == "Zondag":st.write(f"- Sit-ups: 4 sets van {max(1, int(laatste_max['Sit-ups'] * 0.7))} herhalingen")if st.button("💪 WORKOUT VOLTOOID!"):if u_data["last_workout_date"] != str(vandaag_datum):nw_w_streak = u_data["workout_streak"] + 1update_user_db(username, {"workout_streak": nw_w_streak, "last_workout_date": str(vandaag_datum)})st.success("Ingevoers in cloud!")st.rerun()else: st.warning("Vandaag al gedaan!")TAB 6: ZONDAG METING & 40 BADGESwith tab_zondag:st.subheader("📅 Zondagse Voortgang & Het 40-Badge Systeem")nieuw_gewicht = st.number_input("Gewicht deze zondag (kg)", min_value=30.0, value=u_data["gewicht"])st.write("### 🏅 Vul je nieuwe MAX in één set in:")c_ups = st.number_input("Max Chin-ups", min_value=0, value=5)p_ups = st.number_input("Max Push-ups", min_value=0, value=20)p_squats = st.number_input("Max Pistol Squats", min_value=0, value=5)s_ups = st.number_input("Max Sit-ups", min_value=0, value=15)if st.button("💾 Sla zondagse metingen op"):datum_str = vandaag_datum.strftime("%d-%m")weight_history.append({"Datum": datum_str, "Gewicht": nieuw_gewicht})max_history.append({"Datum": datum_str, "Chin-ups": c_ups, "Push-ups": p_ups, "Pistol Squats": p_squats, "Sit-ups": s_ups})update_user_db(username, {"weight_history": json.dumps(weight_history),"max_history": json.dumps(max_history)})st.success("Metingen permanent weggeschreven!")st.rerun()def get_10_tier_badge(reps):if reps >= 100: return "👑 Lvl 10: God Mode (100+)"elif reps >= 50: return "🏆 Lvl 7: Elite Athlete (50+)"elif reps >= 10: return "✨ Lvl 3: Gym Goer (10+)"return "🔒 Lvl 0: Geen Badge"st.write("### 🏆 Jouw Badge Niveaus:")col_b1, col_b2 = st.columns(2)with col_b1: st.metric("Push-ups", get_10_tier_badge(p_ups))with col_b2: st.metric("Chin-ups", get_10_tier_badge(c_ups))TAB 7: ACCOUNT & DOELEN BEHERENwith tab_account:st.subheader("⚙️ Accountinstellingen")with st.form("account_form"):u_email = st.text_input("E-mailadres", value=u_data["email"])u_pass = st.text_input("Wachtwoord", value=u_data["password"])u_age = st.number_input("Leeftijd", min_value=12, value=u_data["leeftijd"])u_weight = st.number_input("Gewicht (kg)", min_value=30.0, value=u_data["gewicht"])u_height = st.number_input("Lengte (cm)", min_value=100, value=u_data["lengte"])u_freq = st.selectbox("Sportfrequentie", ["Niet (0 dagen)", "Licht (1-2 dagen)", "Gemiddeld (3-4 dagen)", "Zwaar (5-7 dagen)"], index=2)u_goal = st.selectbox("Doel", ["Afvallen (Cutten)", "Steady blijven (Maintain)", "Lean worden (Lean bulk)", "Nulken (Bulken)"], index=2)if st.form_submit_button("Sla profiel permanent op"):update_user_db(username, {"email": u_email, "password": u_pass, "leeftijd": u_age,"gewicht": u_weight, "lengte": u_height, "sport_frequentie": u_freq, "doel": u_goal})st.success("Wijzigingen opgeslagen in de centrale database!")st.rerun()
+with tab_schema:
+    st.subheader("🏋️ Dagelijks Lichaamsgewicht Schema")
+    laatste_max = max_history[-1] if max_history else {"Chin-ups": 5, "Push-ups": 20, "Pistol Squats": 5, "Sit-ups": 15}
+    dagen_van_week = ["Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag"]
+    vandaag_dag = dagen_van_week[vandaag_datum.weekday()]
+    
+    st.warning(f"📆 **Huidige trainingsdag: {vandaag_dag}**")
+    
+    col_s1, col_s2 = st.columns(2)
+    with col_s1:
+        if vandaag_dag in ["Maandag", "Donderdag"]:
+            st.info("⚡ **PUSH DAG (Borst, Triceps, Schouders)**")
+            st.write(f"- **Push-ups:** 4 sets van **{max(1, int(laatste_max['Push-ups'] * 0.7))} herhalingen**")
+        elif vandaag_dag in ["Dinsdag", "Vrijdag"]:
+            st.info("⚡ **PULL DAG (Rug, Biceps)**")
+            st.write(f"- **Chin-ups:** 4 sets van **{max(1, int(laatste_max['Chin-ups'] * 0.7))} herhalingen**")
+        elif vandaag_dag in ["Woensdag", "Zaterdag"]:
+            st.info("⚡ **LEGS DAG (Benen & Kuiten)**")
+            st.write(f"- **Pistol Squats:** 4 sets van **{max(1, int(laatste_max['Pistol Squats'] * 0.7))} herhalingen**")
+        elif vandaag_dag == "Zondag":
+            st.info("⚡ **ABS & CORE DAG (Buikspieren)**")
+            st.write(f"- **Sit-ups:** 4 sets van **{max(1, int(laatste_max['Sit-ups'] * 0.7))} herhalingen**")
+
+    with col_s2:
+        st.write("### ⚡ Streak Registratie")
+        if st.button("💪 WORKOUT VOLTOOID!"):
+            if u_data["last_workout_date"] != str(vandaag_datum):
+                nw_w_streak = u_data["workout_streak"] + 1
+                update_user_db(username, {"workout_streak": nw_w_streak, "last_workout_date": str(vandaag_datum)})
+                st.success("Ingevoerd in cloud!")
+                st.rerun()
+            else:
+                st.warning("Je hebt vandaag al getraind!")
+
+# TAB 6: ZONDAG METING & 40 BADGES
+with tab_zondag:
+    st.subheader("📅 Zondagse Voortgang & Het 40-Badge Systeem")
+    nieuw_gewicht = st.number_input("Gewicht deze zondag (kg)", min_value=30.0, value=u_data["gewicht"])
+    
+    st.write("### 🏅 Vul je nieuwe MAX in één set in:")
+    c_ups = st.number_input("Max Chin-ups", min_value=0, value=5)
+    p_ups = st.number_input("Max Push-ups", min_value=0, value=20)
+    p_squats = st.number_input("Max Pistol Squats", min_value=0, value=5)
+    s_ups = st.number_input("Max Sit-ups", min_value=0, value=15)
+    
+    if st.button("💾 Sla zondagse metingen op"):
+        datum_str = vandaag_datum.strftime("%d-%m")
+        weight_history.append({"Datum": datum_str, "Gewicht": nieuw_gewicht})
+        max_history.append({"Datum": datum_str, "Chin-ups": c_ups, "Push-ups": p_ups, "Pistol Squats": p_squats, "Sit-ups": s_ups})
+        
+        update_user_db(username, {
+            "weight_history": json.dumps(weight_history),
+            "max_history": json.dumps(max_history)
+        })
+        st.success("Metingen permanent weggeschreven!")
+        st.rerun()
+
+    def get_10_tier_badge(reps):
+        if reps >= 100: return "👑 Lvl 10: God Mode (100+)"
+        elif reps >= 80: return "👹 Lvl 9: Demonic Strength (80+)"
+        elif reps >= 65: return "🔱 Lvl 8: Mythical Chad (65+)"
+        elif reps >= 50: return "🏆 Lvl 7: Elite Athlete (50+)"
+        elif reps >= 40: return "🥇 Lvl 6: Master (40+)"
+        elif reps >= 30: return "🥈 Lvl 5: Advanced (30+)"
+        elif reps >= 20: return "🥉 Lvl 4: Warrior (20+)"
+        elif reps >= 10: return "✨ Lvl 3: Gym Goer (10+)"
+        elif reps >= 5:  return "🌱 Lvl 2: Beginner (5+)"
+        elif reps >= 1:  return "👟 Lvl 1: Starter (1+)"
+        return "🔒 Lvl 0: Geen Badge"
+
+    st.write("---")
+    st.write("### 🏆 Jouw Huidige Badge Niveaus:")
+    col_b1, col_b2, col_b3, col_b4 = st.columns(4)
+    with col_b1: st.metric("Chin-ups", get_10_tier_badge(c_ups))
+    with col_b2: st.metric("Push-ups", get_10_tier_badge(p_ups))
+    with col_b3: st.metric("Pistol Squats", get_10_tier_badge(p_squats))
+    with col_b4: st.metric("Sit-ups", get_10_tier_badge(s_ups))
+
+# TAB 7: ACCOUNT & DOELEN BEHEREN
+with tab_account:
+    st.subheader("⚙️ Accountinstellingen")
+    with st.form("account_form"):
+        u_email = st.text_input("E-mailadres", value=u_data["email"])
+        u_pass = st.text_input("Wachtwoord", value=u_data["password"])
+        u_age = st.number_input("Leeftijd", min_value=12, value=u_data["leeftijd"])
+        u_weight = st.number_input("Gewicht (kg)", min_value=30.0, value=u_data["gewicht"])
+        u_height = st.number_input("Lengte (cm)", min_value=100, value=u_data["lengte"])
+        u_freq = st.selectbox("Sportfrequentie", ["Niet (0 dagen)", "Licht (1-2 dagen)", "Gemiddeld (3-4 dagen)", "Zwaar (5-7 dagen)"], index=2)
+        u_goal = st.selectbox("Doel", ["Afvallen (Cutten)", "Steady blijven (Maintain)", "Lean worden (Lean bulk)", "Nulken (Bulken)"], index=2)
+        
+        if st.form_submit_button("Sla profiel permanent op"):
+            update_user_db(username, {
+                "email": u_email, "password": u_pass, "leeftijd": u_age,
+                "gewicht": u_weight, "lengte": u_height, "sport_frequentie": u_freq, "doel": u_goal
+            })
+            st.success("Wijzigingen opgeslagen in de centrale database!")
+            st.rerun()

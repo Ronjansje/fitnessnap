@@ -306,7 +306,6 @@ with tab_dash:
     st.write("---")
     st.subheader("📈 Voortgangsdiagrammen")
     col_g1 = st.columns(1)
-    col_g1:
         if max_history:
             df_max = pd.DataFrame(max_history)
             st.write("### Kracht Voortgang (Reps)")

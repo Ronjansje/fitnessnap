@@ -305,15 +305,8 @@ with tab_dash:
 
     st.write("---")
     st.subheader("📈 Voortgangsdiagrammen")
-    col_g1, col_g2 = st.columns(2)
+    col_g1 = st.columns(1)
     with col_g1:
-        if calorie_history:
-            df_cal = pd.DataFrame(calorie_history)
-            st.write("### Calorieën Voortgang")
-            st.line_chart(df_cal.set_index("Datum") if "Datum" in df_cal.columns else df_cal)
-        else:
-            st.info("Nog geen caloriegeschiedenis. Voeg maaltijden toe!")
-    with col_g2:
         if max_history:
             df_max = pd.DataFrame(max_history)
             st.write("### Kracht Voortgang (Reps)")

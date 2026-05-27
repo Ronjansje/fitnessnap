@@ -153,6 +153,7 @@ u_data = get_user(username)
 # Converteer JSON tekst uit database terug naar Python lijsten voor grafieken
 weight_history = json.loads(u_data["weight_history"])
 max_history = json.loads(u_data["max_history"])
+calorie_history = json.loads(u_data["calorie_history"])
 vandaag_datum = datetime.date.today()
 
 # --- MIDDERNACHT AUTO-RESET CHECKER ---
@@ -305,13 +306,12 @@ with tab_dash:
 
     st.write("---")
     st.subheader("📈 Voortgangsdiagrammen")
-    col_g1 = st.columns(1)
-        if max_history:
-            df_max = pd.DataFrame(max_history)
-            st.write("### Kracht Voortgang (Reps)")
-            st.line_chart(df_max.set_index("Datum") if "Datum" in df_max.columns else df_max)
-        else:
-            st.info("Nog geen krachtvoortgang. Voeg metingen toe!")
+    if max_history:
+        df_max = pd.DataFrame(max_history)
+        st.write("### Kracht Voortgang (Reps)")
+        st.line_chart(df_max.set_index("Datum") if "Datum" in df_max.columns else df_max)
+    else:
+        st.info("Nog geen krachtvoortgang. Voeg metingen toe!")
 
 # TAB 2: INSTANT FOTO SCANNER
 with tab_food:
@@ -543,7 +543,7 @@ with tab_schema:
         check1 = st.checkbox("✅ Pistol Squats afgerond", key="check_pistol")
         
         st.write(f"**2. Bulgarian Split Squats (VOLUME)**")
-        st.write(f"   📝 **Uitvoering:** Ën been verhoogd achter je op bank, buig voorbeen tot 90°, terug omhoog, wissel van been")
+        st.write(f"   📝 **Uitvoering:** Én been verhoogd achter je op bank, buig voorbeen tot 90°, terug omhoog, wissel van been")
         st.write(f"   • 4 sets x {max(1, int(set_reps * 1.5))} reps per been")
         st.write(f"   • ⏱️ Rest: 90 seconden")
         check2 = st.checkbox("✅ Bulgarian Split Squats afgerond", key="check_bulgarian")

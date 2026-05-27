@@ -153,7 +153,7 @@ u_data = get_user(username)
 # Converteer JSON tekst uit database terug naar Python lijsten voor grafieken
 weight_history = json.loads(u_data["weight_history"])
 max_history = json.loads(u_data["max_history"])
-calorie_history = json.loads(u_data["calorie_history"]) if u_data.get("calorie_history") else []
+calorie_history = json.loads(u_data["calorie_history"]) if u_data["calorie_history"] else []
 vandaag_datum = datetime.date.today()
 
 # --- MIDDERNACHT AUTO-RESET CHECKER ---

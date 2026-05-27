@@ -41,8 +41,7 @@ def init_db():
             water_intake REAL DEFAULT 0.0,
             laatste_datum TEXT,
             weight_history TEXT DEFAULT '[]',
-            max_history TEXT DEFAULT '[]',
-            calorie_history TEXT DEFAULT '[]'
+            max_history TEXT DEFAULT '[]'
         )
     """)
     conn.commit()
@@ -96,8 +95,7 @@ def reset_account(username):
         logged_calories = 0,
         water_intake = 0.0,
         weight_history = '[]',
-        max_history = '[]',
-        calorie_history = '[]'
+        max_history = '[]'
         WHERE username = ?
     """, (username,))
     conn.commit()
@@ -153,7 +151,6 @@ u_data = get_user(username)
 # Converteer JSON tekst uit database terug naar Python lijsten voor grafieken
 weight_history = json.loads(u_data["weight_history"])
 max_history = json.loads(u_data["max_history"])
-calorie_history = json.loads(u_data["calorie_history"])
 vandaag_datum = datetime.date.today()
 
 # --- MIDDERNACHT AUTO-RESET CHECKER ---
@@ -334,18 +331,8 @@ with tab_food:
             
             if st.button("➕ Voeg deze maaltijd toe"):
                 logged_calories += analysis['calories']
-                datum_str = vandaag_datum.strftime("%d-%m")
-                
-                # Voeg toe aan calorie_history
-                calorie_history.append({
-                    "Datum": datum_str,
-                    "Calorieën": analysis['calories'],
-                    "Type": analysis['food_type']
-                })
-                
                 update_user_db(username, {
-                    "logged_calories": logged_calories,
-                    "calorie_history": json.dumps(calorie_history)
+                    "logged_calories": logged_calories
                 })
                 st.success("✅ Maaltijd opgeslagen in cloud database!")
                 st.rerun()
@@ -363,15 +350,8 @@ with tab_food:
         if st.button("➕ Voeg handmatig voedsel toe"):
             if manual_calories > 0:
                 logged_calories += manual_calories
-                datum_str = vandaag_datum.strftime("%d-%m")
-                calorie_history.append({
-                    "Datum": datum_str,
-                    "Calorieën": manual_calories,
-                    "Type": manual_type
-                })
                 update_user_db(username, {
-                    "logged_calories": logged_calories,
-                    "calorie_history": json.dumps(calorie_history)
+                    "logged_calories": logged_calories
                 })
                 st.success(f"✅ {manual_calories} kcal toegevoegd!")
                 st.rerun()

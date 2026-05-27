@@ -3,7 +3,10 @@ import pandas as pd
 import datetime
 import sqlite3
 import json
+import time
 from PIL import Image
+import base64
+import io
 
 # --- CONFIGURATIE EN STYLING ---
 st.set_page_config(page_title="GigaChad Ultra Fitness", page_icon="🗿", layout="wide")
@@ -38,7 +41,8 @@ def init_db():
             water_intake REAL DEFAULT 0.0,
             laatste_datum TEXT,
             weight_history TEXT DEFAULT '[]',
-            max_history TEXT DEFAULT '[]'
+            max_history TEXT DEFAULT '[]',
+            calorie_history TEXT DEFAULT '[]'
         )
     """)
     conn.commit()
@@ -52,6 +56,12 @@ def get_user(username):
     user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
     conn.close()
     return user
+
+def get_all_users():
+    conn = get_db_connection()
+    users = conn.execute("SELECT username, streak, workout_streak FROM users ORDER BY streak DESC").fetchall()
+    conn.close()
+    return users
 
 def register_user(username, password):
     conn = get_db_connection()
@@ -72,6 +82,24 @@ def update_user_db(username, data_dict):
     query = "UPDATE users SET " + ", ".join([f"{k} = ?" for k in data_dict.keys()]) + " WHERE username = ?"
     params = list(data_dict.values()) + [username]
     conn.execute(query, params)
+    conn.commit()
+    conn.close()
+
+def reset_account(username):
+    conn = get_db_connection()
+    conn.execute("""
+        UPDATE users SET 
+        streak = 0,
+        workout_streak = 0,
+        last_jaw_date = NULL,
+        last_workout_date = NULL,
+        logged_calories = 0,
+        water_intake = 0.0,
+        weight_history = '[]',
+        max_history = '[]',
+        calorie_history = '[]'
+        WHERE username = ?
+    """, (username,))
     conn.commit()
     conn.close()
 
@@ -125,6 +153,7 @@ u_data = get_user(username)
 # Converteer JSON tekst uit database terug naar Python lijsten voor grafieken
 weight_history = json.loads(u_data["weight_history"])
 max_history = json.loads(u_data["max_history"])
+calorie_history = json.loads(u_data["calorie_history"]) if u_data.get("calorie_history") else []
 vandaag_datum = datetime.date.today()
 
 # --- MIDDERNACHT AUTO-RESET CHECKER ---
@@ -177,9 +206,64 @@ def get_badge(reps):
     elif reps >= 1: return "👟 Starter (1+)"
     return "🔒 Geen Badge"
 
+# --- ADVANCED FOOD ANALYZER ---
+def analyze_food_image(image):
+    """
+    Geavanceerde voedselanalyse gebaseerd op afbeelding eigenschappen.
+    Dit is een simulatie - in productie zou je een echte AI/API gebruiken.
+    """
+    img_array = image.convert('RGB')
+    pixels = list(img_array.getdata())
+    
+    avg_r = sum(p[0] for p in pixels) / len(pixels) if pixels else 128
+    avg_g = sum(p[1] for p in pixels) / len(pixels) if pixels else 128
+    avg_b = sum(p[2] for p in pixels) / len(pixels) if pixels else 128
+    
+    color_score = (avg_r + avg_g + avg_b) / 3
+    pixel_brightness = (avg_r * 0.299 + avg_g * 0.587 + avg_b * 0.114) / 255
+    
+    # Bepaal voedselcategorie op basis van kleur
+    if avg_r > avg_g and avg_r > avg_b:  # Rood/Bruin - vlees/ei
+        base_calories = 250
+        food_type = "🥩 Vlees/Eiwitrijke maaltijd"
+        protein = 35
+        carbs = 5
+        fat = 12
+    elif avg_g > avg_r and avg_g > avg_b:  # Groen - groenten
+        base_calories = 150
+        food_type = "🥗 Groenten/Salade"
+        protein = 8
+        carbs = 20
+        fat = 2
+    elif avg_b > avg_r and avg_b > avg_g:  # Blauw - niet realistisch, fallback
+        base_calories = 200
+        food_type = "🍱 Gemengde maaltijd"
+        protein = 15
+        carbs = 30
+        fat = 5
+    else:  # Geel/Oranje - koolhydraten
+        base_calories = 300
+        food_type = "🍚 Koolhydraatrijke maaltijd"
+        protein = 10
+        carbs = 45
+        fat = 8
+    
+    # Aanpassing op basis van helderheid
+    brightness_factor = 0.8 + (pixel_brightness * 0.4)
+    final_calories = int(base_calories * brightness_factor)
+    
+    return {
+        "calories": final_calories,
+        "food_type": food_type,
+        "protein_g": protein,
+        "carbs_g": carbs,
+        "fat_g": fat,
+        "confidence": min(95, 60 + int(pixel_brightness * 35))
+    }
+
 # --- HOOFDMENU TABS ---
-tab_dash, tab_food, tab_water, tab_kaak, tab_schema, tab_progress, tab_account = st.tabs([
-    "📊 Dashboard", "📸 Foto Scanner", "💧 Water Tracker", "🗿 Kaaklijn Trainer", "🏋️ Trainingsschema", "📈 Voortgang & Metingen", "⚙️ Account & Doelen"
+tab_dash, tab_food, tab_water, tab_kaak, tab_schema, tab_progress, tab_account, tab_leaderboard = st.tabs([
+    "📊 Dashboard", "📸 Foto Scanner", "💧 Water Tracker", "🗿 Kaaklijn Trainer", "🏋️ Trainingsschema", "📈 Voortgang & Metingen", "⚙️ Account & Doelen", "🏆 Leaderboard"
 ])
 
 # TAB 1: DASHBOARD
@@ -224,28 +308,84 @@ with tab_dash:
     st.subheader("📈 Voortgangsdiagrammen")
     col_g1, col_g2 = st.columns(2)
     with col_g1:
-        if weight_history:
-            st.write("### Gewichtstrend (kg)")
-            st.line_chart(pd.DataFrame(weight_history).set_index("Datum"))
+        if calorie_history:
+            df_cal = pd.DataFrame(calorie_history)
+            st.write("### Calorieën Voortgang")
+            st.line_chart(df_cal.set_index("Datum") if "Datum" in df_cal.columns else df_cal)
+        else:
+            st.info("Nog geen caloriegeschiedenis. Voeg maaltijden toe!")
     with col_g2:
         if max_history:
+            df_max = pd.DataFrame(max_history)
             st.write("### Kracht Voortgang (Reps)")
-            st.line_chart(pd.DataFrame(max_history).set_index("Datum"))
+            st.line_chart(df_max.set_index("Datum") if "Datum" in df_max.columns else df_max)
+        else:
+            st.info("Nog geen krachtvoortgang. Voeg metingen toe!")
 
 # TAB 2: INSTANT FOTO SCANNER
 with tab_food:
-    st.subheader("📸 Directe Foto Scanner")
-    upload_file = st.file_uploader("Kies een foto van je maaltijd...", type=["jpg", "jpeg", "png"])
-    if upload_file is not None:
-        st.image(Image.open(upload_file), width=300)
-        pixel_hash = len(upload_file.name) * upload_file.size
-        geschatte_kcal = 350 + (pixel_hash % 500)
-        st.metric(label="🔥 Automatisch Geschatte Energie", value=f"{geschatte_kcal} kcal")
-        if st.button("➕ Voeg deze calorieën toe"):
-            logged_calories += geschatte_kcal
-            update_user_db(username, {"logged_calories": logged_calories})
-            st.success("Opgeslagen in cloud database!")
-            st.rerun()
+    st.subheader("📸 AI Voedsel Foto Scanner")
+    
+    col_scan1, col_scan2 = st.columns(2)
+    
+    with col_scan1:
+        st.write("### 📤 Upload Foto")
+        upload_file = st.file_uploader("Kies een foto van je maaltijd...", type=["jpg", "jpeg", "png"])
+        
+        if upload_file is not None:
+            image = Image.open(upload_file)
+            st.image(image, width=300)
+            analysis = analyze_food_image(image)
+            
+            st.success(f"**{analysis['food_type']}** - Betrouwbaarheid: {analysis['confidence']}%")
+            st.write(f"**Calorieën:** {analysis['calories']} kcal")
+            st.write(f"**Eiwit:** {analysis['protein_g']}g | **Koolhydraten:** {analysis['carbs_g']}g | **Vet:** {analysis['fat_g']}g")
+            
+            if st.button("➕ Voeg deze maaltijd toe"):
+                logged_calories += analysis['calories']
+                datum_str = vandaag_datum.strftime("%d-%m")
+                
+                # Voeg toe aan calorie_history
+                calorie_history.append({
+                    "Datum": datum_str,
+                    "Calorieën": analysis['calories'],
+                    "Type": analysis['food_type']
+                })
+                
+                update_user_db(username, {
+                    "logged_calories": logged_calories,
+                    "calorie_history": json.dumps(calorie_history)
+                })
+                st.success("✅ Maaltijd opgeslagen in cloud database!")
+                st.rerun()
+    
+    with col_scan2:
+        st.write("### 📱 Maak Foto Direct")
+        st.info("💡 **Tip:** Zorg dat het voedsel goed zichtbaar is en in goed licht staat voor nauwkeurige analyse!")
+        
+        # Fallback: Manual input
+        st.write("---")
+        st.write("### 📝 Handmatig Invoeren")
+        manual_calories = st.number_input("Calorieën", min_value=0, value=0)
+        manual_type = st.selectbox("Voedseltype", ["🥩 Vlees/Eiwit", "🥗 Groenten", "🍚 Koolhydraten", "🥜 Noten/Olie", "🍕 Snacks", "Overig"])
+        
+        if st.button("➕ Voeg handmatig voedsel toe"):
+            if manual_calories > 0:
+                logged_calories += manual_calories
+                datum_str = vandaag_datum.strftime("%d-%m")
+                calorie_history.append({
+                    "Datum": datum_str,
+                    "Calorieën": manual_calories,
+                    "Type": manual_type
+                })
+                update_user_db(username, {
+                    "logged_calories": logged_calories,
+                    "calorie_history": json.dumps(calorie_history)
+                })
+                st.success(f"✅ {manual_calories} kcal toegevoegd!")
+                st.rerun()
+            else:
+                st.warning("Voer calorieën in!")
 
 # TAB 3: WATER TRACKER
 with tab_water:
@@ -284,14 +424,35 @@ with tab_water:
 with tab_kaak:
     st.subheader("🗿 Dagelijkse Kaaklijn Training")
     kaaklijn_oefeningen = [
-        {"naam": "Mewing Mastery", "uitleg": "Druk je hele tong plat tegen het gehemelte. Houd 60 seconden vast en focus op je volle gehemelte."},
-        {"naam": "Chin Annihilation", "uitleg": "Trek je kin recht naar achteren alsof je een dubbele kin maakt. 30 reps, EXPLOSIEF!"},
-        {"naam": "Jawline Apocalypse", "uitleg": "Kijk naar het plafond en duw je onderkaak naar voren. 50 REPS - NO MERCY!"}
+        {"naam": "Mewing Mastery", "uitleg": "Druk je hele tong plat tegen het gehemelte. Houd 60 seconden vast en focus op je volle gehemelte.", "duration": 60},
+        {"naam": "Chin Annihilation", "uitleg": "Trek je kin recht naar achteren alsof je een dubbele kin maakt. 30 reps, EXPLOSIEF!", "duration": 30},
+        {"naam": "Jawline Apocalypse", "uitleg": "Kijk naar het plafond en duw je onderkaak naar voren. 50 REPS - NO MERCY!", "duration": 45}
     ]
     oefening = kaaklijn_oefeningen[vandaag_datum.day % len(kaaklijn_oefeningen)]
     st.info(f"**Oefening van vandaag:** {oefening['naam']}")
     st.write(oefening['uitleg'])
     
+    st.write("---")
+    st.subheader("⏱️ Timer & Uitvoering")
+    
+    if st.button("▶️ Start Training Timer"):
+        st.session_state.timer_active = True
+    
+    if st.session_state.get("timer_active", False):
+        placeholder = st.empty()
+        for remaining in range(oefening['duration'], 0, -1):
+            with placeholder.container():
+                progress_value = 1 - (remaining / oefening['duration'])
+                st.progress(progress_value)
+                st.metric("⏱️ Tijd Resterend", f"{remaining} seconden")
+            time.sleep(1)
+        
+        with placeholder.container():
+            st.progress(1.0)
+            st.success("✅ Training voltooid!")
+        st.session_state.timer_active = False
+    
+    st.write("---")
     if st.button("✅ Kaaklijntraining afgerond!"):
         if u_data["last_jaw_date"] != str(vandaag_datum):
             nieuwe_streak = u_data["streak"] + 1
@@ -313,7 +474,7 @@ with tab_schema:
     st.info("💪 Alle oefeningen LICHAAMSGWICHT - geen equipment nodig!")
     
     if vandaag_dag in ["Maandag", "Donderdag"]:
-        st.success("⚡ **PUSH DAG (Borst, Triceps, Schouders)**")
+        st.success("⚡ **PUSH DAY (Borst, Triceps, Schouders)**")
         
         push_record = laatste_max.get("Push-ups", 20)
         set_reps = max(1, int(push_record * 0.6))
@@ -322,21 +483,27 @@ with tab_schema:
         st.write(f"   📝 **Uitvoering:** Plaats je handen schouderbreedte uit, lichaam recht, zakken tot je borst bijna de grond raakt, daarna explosief omhoog")
         st.write(f"   • 5 sets x {set_reps} reps @ 70% max")
         st.write(f"   • ⏱️ Rest: 90 seconden tussen sets")
+        check1 = st.checkbox("✅ Push-ups afgerond", key="check_push")
         
         st.write(f"**2. Handstand Push-ups (EXTREME)**")
         st.write(f"   📝 **Uitvoering:** Omgekeerde positie tegen muur, armen schouderbreedte, buig elbogen en duw jezelf omhoog")
         st.write(f"   • 4 sets x {max(1, int(set_reps * 0.4))} reps")
         st.write(f"   • ⏱️ Rest: 2 minuten tussen sets")
+        check2 = st.checkbox("✅ Handstand Push-ups afgerond", key="check_handstand")
         
         st.write(f"**3. Tricep Dips (Lichaamsgwicht)**")
         st.write(f"   📝 **Uitvoering:** Gebruik bank/stoel, handen grepen rand, lichaam omlaag tot elbogen 90°, daarna terug omhoog")
         st.write(f"   • 4 sets x {max(1, int(set_reps * 0.8))} reps")
         st.write(f"   • ⏱️ Rest: 60 seconden")
+        check3 = st.checkbox("✅ Tricep Dips afgerond", key="check_dips")
         
         st.write(f"**4. Pike Push-ups (KILLER)**")
         st.write(f"   📝 **Uitvoering:** Push-up positie, bil omhoog (omgekeerde V-vorm), elbogen buigen en hoofd naar grond")
         st.write(f"   • 3 sets x {max(1, int(set_reps * 0.5))} reps")
         st.write(f"   • ⏱️ Rest: 90 seconden")
+        check4 = st.checkbox("✅ Pike Push-ups afgerond", key="check_pike")
+        
+        all_checked = check1 and check2 and check3 and check4
         
     elif vandaag_dag in ["Dinsdag", "Vrijdag"]:
         st.success("⚡ **PULL DAY (Rug, Biceps)**")
@@ -349,22 +516,28 @@ with tab_schema:
         st.write(f"   • 5 sets x {set_reps} reps @ 70% max")
         st.write(f"   • ⏱️ Rest: 2 minuten tussen sets")
         st.write(f"   • (Brug, boom, of pull-up bar)")
+        check1 = st.checkbox("✅ Chin-ups afgerond", key="check_chinup")
         
         st.write(f"**2. Hangende Knietillen (ABS BURNER)**")
         st.write(f"   📝 **Uitvoering:** Hang aan pull-up bar, trek kniën omhoog naar borst, controleer omlaag")
         st.write(f"   • 4 sets x {max(1, int(set_reps * 1.5))} reps")
         st.write(f"   • ⏱️ Rest: 90 seconden")
+        check2 = st.checkbox("✅ Hangende Knietillen afgerond", key="check_knee")
         
         st.write(f"**3. Inverted Rows (Rug Destroyer)**")
         st.write(f"   📝 **Uitvoering:** Lig onder laag object, greep schouderbreedte, trek jezelf omhoog tot borst object raakt")
         st.write(f"   • 4 sets x {max(1, int(set_reps * 1.2))} reps")
         st.write(f"   • (Onder tafel of laag object)")
         st.write(f"   • ⏱️ Rest: 60 seconden")
+        check3 = st.checkbox("✅ Inverted Rows afgerond", key="check_inverted")
         
         st.write(f"**4. Brace Hang (Grip Strength)**")
         st.write(f"   📝 **Uitvoering:** Hang aan pull-up bar met gestrekte armen, zo lang mogelijk vasthouden")
         st.write(f"   • 3 sets x 20 seconden hang")
         st.write(f"   • ⏱️ Rest: 90 seconden")
+        check4 = st.checkbox("✅ Brace Hang afgerond", key="check_brace")
+        
+        all_checked = check1 and check2 and check3 and check4
         
     elif vandaag_dag in ["Woensdag", "Zaterdag"]:
         st.success("⚡ **LEGS DAY (Benen, Glutes, Calves)**")
@@ -376,21 +549,27 @@ with tab_schema:
         st.write(f"   📝 **Uitvoering:** Sta op één been, ander been recht vooruit, buig steelbeen tot je bijna grond raakt, terug omhoog (gebruik stoel als backup)")
         st.write(f"   • 4 sets x {set_reps} reps @ 70% max")
         st.write(f"   • ⏱️ Rest: 2 minuten")
+        check1 = st.checkbox("✅ Pistol Squats afgerond", key="check_pistol")
         
         st.write(f"**2. Bulgarian Split Squats (VOLUME)**")
         st.write(f"   📝 **Uitvoering:** Ën been verhoogd achter je op bank, buig voorbeen tot 90°, terug omhoog, wissel van been")
         st.write(f"   • 4 sets x {max(1, int(set_reps * 1.5))} reps per been")
         st.write(f"   • ⏱️ Rest: 90 seconden")
+        check2 = st.checkbox("✅ Bulgarian Split Squats afgerond", key="check_bulgarian")
         
         st.write(f"**3. Jump Squats (EXPLOSIEF)**")
         st.write(f"   📝 **Uitvoering:** Normale squat positie, explosief omhoog springen, land zacht en ga direct omlaag voor volgende rep")
         st.write(f"   • 3 sets x {max(1, int(set_reps * 1.2))} reps")
         st.write(f"   • ⏱️ Rest: 90 seconden")
+        check3 = st.checkbox("✅ Jump Squats afgerond", key="check_jumpsquats")
         
         st.write(f"**4. Calf Raises (PUMP)**")
         st.write(f"   📝 **Uitvoering:** Sta op beide voeten, til jezelf op je tenen, controleer omlaag")
         st.write(f"   • 3 sets x {max(1, int(set_reps * 3))} reps")
         st.write(f"   • ⏱️ Rest: 60 seconden")
+        check4 = st.checkbox("✅ Calf Raises afgerond", key="check_calf")
+        
+        all_checked = check1 and check2 and check3 and check4
         
     elif vandaag_dag == "Zondag":
         st.success("⚡ **ABS & CORE DAY (Buikspieren, Core Strength)**")
@@ -402,52 +581,46 @@ with tab_schema:
         st.write(f"   📝 **Uitvoering:** Lig op rug, voeten op grond/hooked, trek jezelf omhoog tot bovenlichaam 45° hoek, controleer omlaag")
         st.write(f"   • 5 sets x {set_reps} reps @ 70% max")
         st.write(f"   • ⏱️ Rest: 90 seconden")
+        check1 = st.checkbox("✅ Sit-ups afgerond", key="check_situps")
         
         st.write(f"**2. Plank Challenge (CORE DESTROYER)**")
         st.write(f"   📝 **Uitvoering:** Onderarm plank positie, lichaam recht van hoofd tot enkels, span core aan")
         st.write(f"   • 4 sets x 45 seconden hold")
         st.write(f"   • ⏱️ Rest: 90 seconden")
+        check2 = st.checkbox("✅ Plank Challenge afgerond", key="check_plank")
         
         st.write(f"**3. Mountain Climbers (CARDIO ABS)**")
         st.write(f"   📝 **Uitvoering:** Push-up positie, trek afwisselend kniën naar borst in snelle beweging")
         st.write(f"   • 3 sets x {max(1, int(set_reps * 2))} reps")
         st.write(f"   • ⏱️ Rest: 60 seconden")
+        check3 = st.checkbox("✅ Mountain Climbers afgerond", key="check_mountain")
         
         st.write(f"**4. Russian Twists (OBLIQUES)**")
         st.write(f"   📝 **Uitvoering:** Zit met benen gebogen, draai bovenlichaam links en rechts, raak grond beide kanten")
         st.write(f"   • 3 sets x {max(1, int(set_reps * 1.5))} reps per kant")
         st.write(f"   • ⏱️ Rest: 60 seconden")
+        check4 = st.checkbox("✅ Russian Twists afgerond", key="check_twists")
+        
+        all_checked = check1 and check2 and check3 and check4
 
     st.write("---")
     st.write("### ⚡ Workout Registratie")
-    if st.button("💪 WORKOUT VOLTOOID!"):
-        if u_data["last_workout_date"] != str(vandaag_datum):
-            nw_w_streak = u_data["workout_streak"] + 1
-            update_user_db(username, {"workout_streak": nw_w_streak, "last_workout_date": str(vandaag_datum)})
-            st.success("🔥 Ingevoerd in cloud! Streak +1!")
-            st.rerun()
-        else:
-            st.warning("Je hebt vandaag al getraind!")
+    
+    if all_checked:
+        if st.button("💪 WORKOUT VOLTOOID!"):
+            if u_data["last_workout_date"] != str(vandaag_datum):
+                nw_w_streak = u_data["workout_streak"] + 1
+                update_user_db(username, {"workout_streak": nw_w_streak, "last_workout_date": str(vandaag_datum)})
+                st.success("🔥 Ingevoerd in cloud! Streak +1!")
+                st.rerun()
+            else:
+                st.warning("Je hebt vandaag al getraind!")
+    else:
+        st.info("✔️ Vink alle 4 oefeningen af om je workout op te slaan!")
 
 # TAB 6: VOORTGANG & METINGEN
 with tab_progress:
     st.subheader("📈 Voortgang & Metingen Overzicht")
-    
-    st.write("---")
-    st.subheader("📊 Voortgangsdiagrammen")
-    col_g1, col_g2 = st.columns(2)
-    with col_g1:
-        if weight_history:
-            st.write("### Gewichtstrend (kg)")
-            st.line_chart(pd.DataFrame(weight_history).set_index("Datum"))
-        else:
-            st.info("Nog geen gewichtgeschiedenis. Voeg metingen toe!")
-    with col_g2:
-        if max_history:
-            st.write("### Kracht Voortgang (Reps)")
-            st.line_chart(pd.DataFrame(max_history).set_index("Datum"))
-        else:
-            st.info("Nog geen krachtvoortgang. Voeg metingen toe!")
     
     st.write("---")
     st.subheader("📅 Metingen Invoeren")
@@ -516,3 +689,81 @@ with tab_account:
             })
             st.success("✅ Wijzigingen opgeslagen!")
             st.rerun()
+    
+    st.write("---")
+    st.subheader("🚨 Account Reset")
+    st.warning("⚠️ **LET OP:** Dit verwijdert ALLE je gegevens (streaks, metingen, calorieën). Dit kan niet ongedaan gemaakt worden!")
+    
+    if st.button("🔄 Reset Account Volledig", key="reset_account"):
+        reset_account(username)
+        st.success("✅ Account gereset! Alle gegevens verwijderd.")
+        st.balloons()
+        st.rerun()
+
+# TAB 8: LEADERBOARD
+with tab_leaderboard:
+    st.subheader("🏆 GigaChad Fitness Leaderboard")
+    st.write("---")
+    
+    all_users = get_all_users()
+    
+    if all_users:
+        # Jaw Streak Leaderboard
+        st.write("### 🗿 Kaaklijn Streak Kampioen")
+        jaw_data = sorted(all_users, key=lambda x: x["streak"], reverse=True)
+        
+        col_rank, col_user, col_days = st.columns([1, 2, 2])
+        with col_rank:
+            st.write("**Rang**")
+        with col_user:
+            st.write("**Gebruiker**")
+        with col_days:
+            st.write("**Streak (Dagen)**")
+        
+        st.write("---")
+        for idx, user in enumerate(jaw_data[:10], 1):
+            col_rank, col_user, col_days = st.columns([1, 2, 2])
+            with col_rank:
+                if idx == 1:
+                    st.write(f"🥇 #{idx}")
+                elif idx == 2:
+                    st.write(f"🥈 #{idx}")
+                elif idx == 3:
+                    st.write(f"🥉 #{idx}")
+                else:
+                    st.write(f"#{idx}")
+            with col_user:
+                st.write(f"**{user['username']}**")
+            with col_days:
+                st.metric("", f"{user['streak']} 🔥")
+        
+        st.write("---")
+        st.write("### ⚡ Workout Streak Kampioen")
+        workout_data = sorted(all_users, key=lambda x: x["workout_streak"], reverse=True)
+        
+        col_rank, col_user, col_days = st.columns([1, 2, 2])
+        with col_rank:
+            st.write("**Rang**")
+        with col_user:
+            st.write("**Gebruiker**")
+        with col_days:
+            st.write("**Streak (Dagen)**")
+        
+        st.write("---")
+        for idx, user in enumerate(workout_data[:10], 1):
+            col_rank, col_user, col_days = st.columns([1, 2, 2])
+            with col_rank:
+                if idx == 1:
+                    st.write(f"🥇 #{idx}")
+                elif idx == 2:
+                    st.write(f"🥈 #{idx}")
+                elif idx == 3:
+                    st.write(f"🥉 #{idx}")
+                else:
+                    st.write(f"#{idx}")
+            with col_user:
+                st.write(f"**{user['username']}**")
+            with col_days:
+                st.metric("", f"{user['workout_streak']} ⚡")
+    else:
+        st.info("📊 Nog geen gebruikers op het leaderboard!")

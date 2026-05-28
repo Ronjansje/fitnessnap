@@ -66,6 +66,40 @@ def init_db():
         )
     """)
     conn.commit()
+    
+    # DATABASE MIGRATION: Add missing columns for existing users
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN geboortedatum TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN sleep_history TEXT DEFAULT '[]'")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN strength_level TEXT DEFAULT 'Gemiddeld'")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN last_strength_date TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    
+    # Set default birthdates for existing users without one
+    default_birthdate = (datetime.date.today() - datetime.timedelta(days=365*20)).strftime("%Y-%m-%d")
+    cursor.execute("""
+        UPDATE users 
+        SET geboortedatum = ? 
+        WHERE geboortedatum IS NULL OR geboortedatum = ''
+    """, (default_birthdate,))
+    conn.commit()
     conn.close()
 
 init_db()
@@ -74,6 +108,8 @@ init_db()
 def calculate_age(birthdate_str):
     """Bereken leeftijd uit geboortedatum (formaat: YYYY-MM-DD)"""
     try:
+        if not birthdate_str or birthdate_str == "":
+            return 20
         birthdate = datetime.datetime.strptime(birthdate_str, "%Y-%m-%d").date()
         today = datetime.date.today()
         age = today.year - birthdate.year - ((today.month, today.day) < (birthdate.month, birthdate.day))
@@ -192,9 +228,9 @@ u_data = get_user(username)
 leeftijd = calculate_age(u_data["geboortedatum"]) if u_data["geboortedatum"] else 20
 
 # Converteer JSON tekst uit database terug naar Python lijsten voor grafieken
-weight_history = json.loads(u_data["weight_history"])
-max_history = json.loads(u_data["max_history"])
-sleep_history = json.loads(u_data["sleep_history"])
+weight_history = json.loads(u_data["weight_history"]) if u_data["weight_history"] else []
+max_history = json.loads(u_data["max_history"]) if u_data["max_history"] else []
+sleep_history = json.loads(u_data["sleep_history"]) if u_data["sleep_history"] else []
 vandaag_datum = datetime.date.today()
 
 # --- MIDDERNACHT AUTO-RESET CHECKER ---
@@ -866,7 +902,11 @@ with tab_account:
     with st.form("account_form"):
         u_email = st.text_input("E-mailadres", value=u_data["email"])
         u_pass = st.text_input("Wachtwoord", value=u_data["password"])
-        u_birthdate = st.date_input("Geboortedatum", value=datetime.datetime.strptime(u_data["geboortedatum"], "%Y-%m-%d").date() if u_data["geboortedatum"] else datetime.date(2000, 1, 1))
+        try:
+            birthdate_value = datetime.datetime.strptime(u_data["geboortedatum"], "%Y-%m-%d").date() if u_data["geboortedatum"] else datetime.date(2000, 1, 1)
+        except:
+            birthdate_value = datetime.date(2000, 1, 1)
+        u_birthdate = st.date_input("Geboortedatum", value=birthdate_value)
         u_weight = st.number_input("Gewicht (kg)", min_value=30.0, value=u_data["gewicht"])
         u_height = st.number_input("Lengte (cm)", min_value=100, value=u_data["lengte"])
         u_freq = st.selectbox("Sportfrequentie", ["Niet (0 dagen)", "Licht (1-2 dagen)", "Gemiddeld (3-4 dagen)", "Zwaar (5-7 dagen)"], index=2)

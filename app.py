@@ -11,6 +11,24 @@ import io
 # --- CONFIGURATIE EN STYLING ---
 st.set_page_config(page_title="GigaChad Ultra Fitness", page_icon="🗿", layout="wide")
 
+# --- DARK MODE TOGGLE ---
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = False
+
+if st.session_state.dark_mode:
+    dark_css = """
+    <style>
+    [data-testid="stAppViewContainer"] {
+        background-color: #1a1a1a;
+        color: #ffffff;
+    }
+    [data-testid="stSidebar"] {
+        background-color: #0d0d0d;
+    }
+    </style>
+    """
+    st.markdown(dark_css, unsafe_allow_html=True)
+
 # --- DATABASE FUNCTIES (PERMANENTE OPSLAG) ---
 def get_db_connection():
     conn = sqlite3.connect("fitness.db")
@@ -27,7 +45,7 @@ def init_db():
             username TEXT UNIQUE,
             password TEXT,
             email TEXT,
-            leeftijd INTEGER,
+            geboortedatum TEXT,
             geslacht TEXT,
             gewicht REAL,
             lengte INTEGER,
@@ -41,7 +59,10 @@ def init_db():
             water_intake REAL DEFAULT 0.0,
             laatste_datum TEXT,
             weight_history TEXT DEFAULT '[]',
-            max_history TEXT DEFAULT '[]'
+            max_history TEXT DEFAULT '[]',
+            sleep_history TEXT DEFAULT '[]',
+            strength_level TEXT DEFAULT 'Gemiddeld',
+            last_strength_date TEXT
         )
     """)
     conn.commit()
@@ -49,7 +70,17 @@ def init_db():
 
 init_db()
 
-# --- FUNCTIES OM DATA OP TE HALEN EN OP TE SLAAN ---
+# --- HULPFUNCTIES ---
+def calculate_age(birthdate_str):
+    """Bereken leeftijd uit geboortedatum (formaat: YYYY-MM-DD)"""
+    try:
+        birthdate = datetime.datetime.strptime(birthdate_str, "%Y-%m-%d").date()
+        today = datetime.date.today()
+        age = today.year - birthdate.year - ((today.month, today.day) < (birthdate.month, birthdate.day))
+        return age
+    except:
+        return 20
+
 def get_user(username):
     conn = get_db_connection()
     user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
@@ -65,10 +96,11 @@ def get_all_users():
 def register_user(username, password):
     conn = get_db_connection()
     try:
+        today = datetime.date.today()
         conn.execute("""
-            INSERT INTO users (username, password, email, leeftijd, geslacht, gewicht, lengte, sport_frequentie, doel, laatste_datum)
-            VALUES (?, ?, 'chad@fitness.nl', 20, 'Man', 75.0, 180, 'Gemiddeld (3-4 dagen)', 'Lean worden (Lean bulk)', ?)
-        """, (username, password, str(datetime.date.today())))
+            INSERT INTO users (username, password, email, geboortedatum, geslacht, gewicht, lengte, sport_frequentie, doel, laatste_datum)
+            VALUES (?, ?, 'chad@fitness.nl', ?, 'Man', 75.0, 180, 'Gemiddeld (3-4 dagen)', 'Lean worden (Lean bulk)', ?)
+        """, (username, password, today.strftime("%Y-%m-%d"), today.strftime("%Y-%m-%d")))
         conn.commit()
         success = True
     except sqlite3.IntegrityError:
@@ -95,7 +127,8 @@ def reset_account(username):
         logged_calories = 0,
         water_intake = 0.0,
         weight_history = '[]',
-        max_history = '[]'
+        max_history = '[]',
+        sleep_history = '[]'
         WHERE username = ?
     """, (username,))
     conn.commit()
@@ -132,11 +165,18 @@ if st.session_state.user_session is None:
         with st.form("register_form"):
             new_user = st.text_input("Kies Gebruikersnaam")
             new_pass = st.text_input("Kies Wachtwoord", type="password")
+            new_birthdate = st.date_input("Geboortedatum", value=datetime.date(2004, 1, 1))
             submit_reg = st.form_submit_button("Account Aanmaken 🦾")
             
             if submit_reg:
                 if new_user and new_pass:
                     if register_user(new_user, new_pass):
+                        # Update met geboortedatum
+                        conn = get_db_connection()
+                        conn.execute("UPDATE users SET geboortedatum = ? WHERE username = ?", 
+                                   (new_birthdate.strftime("%Y-%m-%d"), new_user))
+                        conn.commit()
+                        conn.close()
                         st.success("Account aangemaakt! Je kunt nu inloggen bij het eerste tabblad.")
                     else:
                         st.error("Deze gebruikersnaam bestaat al. Kies een andere.")
@@ -148,9 +188,13 @@ if st.session_state.user_session is None:
 username = st.session_state.user_session
 u_data = get_user(username)
 
+# Bereken leeftijd
+leeftijd = calculate_age(u_data["geboortedatum"]) if u_data["geboortedatum"] else 20
+
 # Converteer JSON tekst uit database terug naar Python lijsten voor grafieken
 weight_history = json.loads(u_data["weight_history"])
 max_history = json.loads(u_data["max_history"])
+sleep_history = json.loads(u_data["sleep_history"])
 vandaag_datum = datetime.date.today()
 
 # --- MIDDERNACHT AUTO-RESET CHECKER ---
@@ -167,11 +211,11 @@ if u_data["laatste_datum"] != str(vandaag_datum):
     })
     st.toast("🌙 Nieuwe dag gestart! Calorietotaal en water gereset naar nul.", icon="🔄")
 
-# --- CALORIE & WATER DOELEN BEREKENING ---
+# --- CALORIE & WATER DOELEN BEREKENING (GEBASEERD OP LEEFTIJD) ---
 if u_data["geslacht"] == "Man":
-    bmr = 10 * u_data["gewicht"] + 6.25 * u_data["lengte"] - 5 * u_data["leeftijd"] + 5
+    bmr = 10 * u_data["gewicht"] + 6.25 * u_data["lengte"] - 5 * leeftijd + 5
 else:
-    bmr = 10 * u_data["gewicht"] + 6.25 * u_data["lengte"] - 5 * u_data["leeftijd"] - 161
+    bmr = 10 * u_data["gewicht"] + 6.25 * u_data["lengte"] - 5 * leeftijd - 161
 
 factor_map = {"Niet (0 dagen)": 1.2, "Licht (1-2 dagen)": 1.375, "Gemiddeld (3-4 dagen)": 1.55, "Zwaar (5-7 dagen)": 1.725}
 tdee = bmr * factor_map[u_data["sport_frequentie"]]
@@ -183,6 +227,14 @@ water_doel = round(((u_data["gewicht"] * 35) + {"Niet (0 dagen)": 0, "Licht (1-2
 # --- SIDEBAR INTERFACE ---
 st.sidebar.subheader(f"👋 Account: {u_data['username']}")
 st.sidebar.write(f"📧 *Mail:* {u_data['email']}")
+st.sidebar.write(f"🎂 **Leeftijd:** {leeftijd} jaar")
+
+# Dark Mode Toggle
+if st.sidebar.checkbox("🌙 Dark Mode", value=st.session_state.dark_mode):
+    st.session_state.dark_mode = True
+else:
+    st.session_state.dark_mode = False
+
 if st.sidebar.button("🔒 Uitloggen op dit apparaat"):
     st.session_state.user_session = None
     st.rerun()
@@ -220,32 +272,31 @@ def analyze_food_image(image):
     pixel_brightness = (avg_r * 0.299 + avg_g * 0.587 + avg_b * 0.114) / 255
     
     # Bepaal voedselcategorie op basis van kleur
-    if avg_r > avg_g and avg_r > avg_b:  # Rood/Bruin - vlees/ei
+    if avg_r > avg_g and avg_r > avg_b:
         base_calories = 250
         food_type = "🥩 Vlees/Eiwitrijke maaltijd"
         protein = 35
         carbs = 5
         fat = 12
-    elif avg_g > avg_r and avg_g > avg_b:  # Groen - groenten
+    elif avg_g > avg_r and avg_g > avg_b:
         base_calories = 150
         food_type = "🥗 Groenten/Salade"
         protein = 8
         carbs = 20
         fat = 2
-    elif avg_b > avg_r and avg_b > avg_g:  # Blauw - niet realistisch, fallback
+    elif avg_b > avg_r and avg_b > avg_g:
         base_calories = 200
         food_type = "🍱 Gemengde maaltijd"
         protein = 15
         carbs = 30
         fat = 5
-    else:  # Geel/Oranje - koolhydraten
+    else:
         base_calories = 300
         food_type = "🍚 Koolhydraatrijke maaltijd"
         protein = 10
         carbs = 45
         fat = 8
     
-    # Aanpassing op basis van helderheid
     brightness_factor = 0.8 + (pixel_brightness * 0.4)
     final_calories = int(base_calories * brightness_factor)
     
@@ -258,9 +309,58 @@ def analyze_food_image(image):
         "confidence": min(95, 60 + int(pixel_brightness * 35))
     }
 
+# --- KRACHT LEVEL SYSTEM ---
+def get_strength_level():
+    """Bepaal huidige krachtlevel op basis van meest recente workout"""
+    last_date = u_data["last_strength_date"]
+    if last_date and last_date == str(vandaag_datum):
+        return u_data["strength_level"]
+    return "Gemiddeld"
+
+def scale_workout(base_reps, strength_level):
+    """Schaal oefeningen op basis van krachtlevel"""
+    if strength_level == "Veel Kracht":
+        return int(base_reps * 1.3)
+    elif strength_level == "Weinig Kracht":
+        return max(1, int(base_reps * 0.7))
+    return base_reps
+
+# --- SLAAP TRACKER SYSTEM ---
+def add_sleep_record(hours, quality):
+    """Voeg slaaprecord toe"""
+    sleep_entry = {
+        "datum": str(vandaag_datum),
+        "uren": hours,
+        "kwaliteit": quality,
+        "score": int((hours / 8) * 100 * (quality / 5))
+    }
+    sleep_history.append(sleep_entry)
+    update_user_db(username, {"sleep_history": json.dumps(sleep_history)})
+    return sleep_entry
+
+def get_sleep_tips(hours, quality):
+    """Geef slaaptips op basis van slaap"""
+    tips = []
+    
+    if hours < 6:
+        tips.append("😴 Je hebt te weinig geslapen! Probeer morgen 7-8 uur te slapen.")
+    elif hours > 9:
+        tips.append("⏰ Je hebt veel geslapen. Dit kan vermoeidheid geven. Probeer 7-8 uur.")
+    
+    if quality <= 2:
+        tips.append("🛏️ Je slaapkwaliteit was slecht. Tips: geen schermen 30 min voor bed, donkere kamer.")
+        tips.append("🌙 Probeer meditatie of ademhalingsoefeningen voor beter slapen.")
+    elif quality <= 3:
+        tips.append("🧘 Je slaapkwaliteit kan beter. Zorg voor regelmatige slaaptijden.")
+    
+    if not tips:
+        tips.append("✅ Prima slaap! Zorg dat je dit volhoudt voor optimale recovery.")
+    
+    return tips
+
 # --- HOOFDMENU TABS ---
-tab_dash, tab_food, tab_water, tab_kaak, tab_schema, tab_progress, tab_account, tab_leaderboard = st.tabs([
-    "📊 Dashboard", "📸 Foto Scanner", "💧 Water Tracker", "🗿 Kaaklijn Trainer", "🏋️ Trainingsschema", "📈 Voortgang & Metingen", "⚙️ Account & Doelen", "🏆 Leaderboard"
+tab_dash, tab_food, tab_water, tab_kaak, tab_schema, tab_progress, tab_sleep, tab_account, tab_leaderboard = st.tabs([
+    "📊 Dashboard", "📸 Foto Scanner", "💧 Water Tracker", "🗿 Kaaklijn Trainer", "🏋️ Trainingsschema", "📈 Voortgang & Metingen", "😴 Slaap Tracker", "⚙️ Account & Doelen", "🏆 Leaderboard"
 ])
 
 # TAB 1: DASHBOARD
@@ -278,27 +378,47 @@ with tab_dash:
         st.metric(label="⚡ Workout Streak", value=f"{u_data['workout_streak']} Dagen")
 
     st.write("---")
+    
+    # Gewichtsverlies diagram
+    st.subheader("📉 Gewichtsverlies Voortgang")
+    if len(weight_history) >= 2:
+        df_weight = pd.DataFrame(weight_history)
+        st.line_chart(df_weight.set_index("Datum") if "Datum" in df_weight.columns else df_weight)
+        
+        first_weight = weight_history[0].get("Gewicht", u_data["gewicht"])
+        last_weight = weight_history[-1].get("Gewicht", u_data["gewicht"])
+        weight_change = first_weight - last_weight
+        
+        if weight_change > 0:
+            st.success(f"💪 Je bent **{weight_change:.1f} kg afgevallen**! Great job!")
+        elif weight_change < 0:
+            st.info(f"📈 Je bent **{abs(weight_change):.1f} kg aangekomen**. Volg je doel!")
+        else:
+            st.info("⚖️ Je gewicht is stabiel. Goed bezig!")
+    else:
+        st.info("📊 Voeg metingen toe om gewichtsvoortgang te zien!")
+
+    st.write("---")
     st.subheader("🏆 Jouw Huidige Badges")
     
-    # Haal laatste records op
     laatste_max = max_history[-1] if max_history else {"Chin-ups": 5, "Push-ups": 20, "Pistol Squats": 5, "Sit-ups": 15}
     
     col_b1, col_b2, col_b3, col_b4 = st.columns(4)
     with col_b1:
         badge_chinups = get_badge(laatste_max.get("Chin-ups", 0))
-        st.metric("🔗 Chin-ups", badge_chinups)
+        st.caption("🔗 Chin-ups")
         st.caption(badge_chinups)
     with col_b2:
         badge_pushups = get_badge(laatste_max.get("Push-ups", 0))
-        st.metric("👊 Push-ups", badge_pushups)
+        st.caption("👊 Push-ups")
         st.caption(badge_pushups)
     with col_b3:
         badge_pistol = get_badge(laatste_max.get("Pistol Squats", 0))
-        st.metric("🦵 Pistol Squats", badge_pistol)
+        st.caption("🦵 Pistol Squats")
         st.caption(badge_pistol)
     with col_b4:
         badge_situps = get_badge(laatste_max.get("Sit-ups", 0))
-        st.metric("🤸 Sit-ups", badge_situps)
+        st.caption("🤸 Sit-ups")
         st.caption(badge_situps)
 
     st.write("---")
@@ -330,16 +450,35 @@ with tab_food:
             st.write(f"**Eiwit:** {analysis['protein_g']}g | **Koolhydraten:** {analysis['carbs_g']}g | **Vet:** {analysis['fat_g']}g")
             
             if st.button("➕ Voeg deze maaltijd toe"):
-                logged_calories += analysis['calories']
+                new_logged_calories = logged_calories + analysis['calories']
                 update_user_db(username, {
-                    "logged_calories": logged_calories
+                    "logged_calories": new_logged_calories
                 })
                 st.success("✅ Maaltijd opgeslagen in cloud database!")
                 st.rerun()
     
     with col_scan2:
         st.write("### 📱 Maak Foto Direct")
-        st.info("💡 **Tip:** Zorg dat het voedsel goed zichtbaar is en in goed licht staat voor nauwkeurige analyse!")
+        
+        # Camera input (werkt op mobiel)
+        camera_file = st.camera_input("📷 Maak een foto van je maaltijd")
+        
+        if camera_file is not None:
+            image = Image.open(camera_file)
+            st.image(image, width=300)
+            analysis = analyze_food_image(image)
+            
+            st.success(f"**{analysis['food_type']}** - Betrouwbaarheid: {analysis['confidence']}%")
+            st.write(f"**Calorieën:** {analysis['calories']} kcal")
+            st.write(f"**Eiwit:** {analysis['protein_g']}g | **Koolhydraten:** {analysis['carbs_g']}g | **Vet:** {analysis['fat_g']}g")
+            
+            if st.button("➕ Voeg foto maaltijd toe"):
+                new_logged_calories = logged_calories + analysis['calories']
+                update_user_db(username, {
+                    "logged_calories": new_logged_calories
+                })
+                st.success("✅ Maaltijd opgeslagen in cloud database!")
+                st.rerun()
         
         # Fallback: Manual input
         st.write("---")
@@ -349,9 +488,9 @@ with tab_food:
         
         if st.button("➕ Voeg handmatig voedsel toe"):
             if manual_calories > 0:
-                logged_calories += manual_calories
+                new_logged_calories = logged_calories + manual_calories
                 update_user_db(username, {
-                    "logged_calories": logged_calories
+                    "logged_calories": new_logged_calories
                 })
                 st.success(f"✅ {manual_calories} kcal toegevoegd!")
                 st.rerun()
@@ -372,23 +511,23 @@ with tab_water:
     col_w1, col_w2, col_w3, col_w4 = st.columns(4)
     with col_w1:
         if st.button("🥤 +250 ml"):
-            water_intake = round(water_intake + 0.25, 2)
-            update_user_db(username, {"water_intake": water_intake})
+            new_water = round(water_intake + 0.25, 2)
+            update_user_db(username, {"water_intake": new_water})
             st.rerun()
     with col_w2:
         if st.button("🍶 +500 ml"):
-            water_intake = round(water_intake + 0.50, 2)
-            update_user_db(username, {"water_intake": water_intake})
+            new_water = round(water_intake + 0.50, 2)
+            update_user_db(username, {"water_intake": new_water})
             st.rerun()
     with col_w3:
         if st.button("💧 +1000 ml"):
-            water_intake = round(water_intake + 1.0, 2)
-            update_user_db(username, {"water_intake": water_intake})
+            new_water = round(water_intake + 1.0, 2)
+            update_user_db(username, {"water_intake": new_water})
             st.rerun()
     with col_w4:
         if st.button(f"➕ +{custom_water} ml"):
-            water_intake = round(water_intake + (custom_water / 1000), 2)
-            update_user_db(username, {"water_intake": water_intake})
+            new_water = round(water_intake + (custom_water / 1000), 2)
+            update_user_db(username, {"water_intake": new_water})
             st.rerun()
 
 # TAB 4: KAAKLIJN TRAINER
@@ -430,11 +569,25 @@ with tab_kaak:
             update_user_db(username, {"streak": nieuwe_streak, "last_jaw_date": str(vandaag_datum)})
             st.success("🔥 Database geüpdatet! Streak verhoogd!")
             st.rerun()
-        else: st.warning("Je hebt vandaag al getraind!")
+        else: 
+            st.warning("Je hebt vandaag al getraind!")
 
 # TAB 5: TRAININGSSCHEMA
 with tab_schema:
     st.subheader("🏋️ Dagelijks Trainingsschema (LICHAAMSGWICHT)")
+    
+    # Krachtlevel selector
+    st.write("---")
+    st.subheader("💪 Hoe voelt je kracht vandaag?")
+    strength_options = ["Weinig Kracht", "Gemiddeld", "Veel Kracht"]
+    selected_strength = st.radio("Selecteer je krachtlevel:", strength_options, horizontal=True)
+    
+    if st.button("💾 Sla krachtlevel op"):
+        update_user_db(username, {"strength_level": selected_strength, "last_strength_date": str(vandaag_datum)})
+        st.success(f"✅ Krachtlevel '{selected_strength}' opgeslagen!")
+        st.rerun()
+    
+    st.write("---")
     
     # Haal records op
     laatste_max = max_history[-1] if max_history else {"Chin-ups": 5, "Push-ups": 20, "Pistol Squats": 5, "Sit-ups": 15}
@@ -442,13 +595,19 @@ with tab_schema:
     vandaag_dag = dagen_van_week[vandaag_datum.weekday()]
     
     st.warning(f"📆 **Trainingsdag: {vandaag_dag}**")
+    
+    # Toon krachtlevel
+    current_strength = selected_strength if u_data["last_strength_date"] == str(vandaag_datum) else u_data["strength_level"]
+    strength_emoji = "💪💪💪" if current_strength == "Veel Kracht" else "💪" if current_strength == "Gemiddeld" else "💪❌"
+    st.info(f"🔋 **Krachtlevel vandaag:** {current_strength} {strength_emoji}")
+    
     st.info("💪 Alle oefeningen LICHAAMSGWICHT - geen equipment nodig!")
     
     if vandaag_dag in ["Maandag", "Donderdag"]:
         st.success("⚡ **PUSH DAY (Borst, Triceps, Schouders)**")
         
         push_record = laatste_max.get("Push-ups", 20)
-        set_reps = max(1, int(push_record * 0.6))
+        set_reps = scale_workout(max(1, int(push_record * 0.6)), current_strength)
         
         st.write(f"**1. Push-ups (EXPLOSIEF)**")
         st.write(f"   📝 **Uitvoering:** Plaats je handen schouderbreedte uit, lichaam recht, zakken tot je borst bijna de grond raakt, daarna explosief omhoog")
@@ -458,19 +617,19 @@ with tab_schema:
         
         st.write(f"**2. Handstand Push-ups (EXTREME)**")
         st.write(f"   📝 **Uitvoering:** Omgekeerde positie tegen muur, armen schouderbreedte, buig elbogen en duw jezelf omhoog")
-        st.write(f"   • 4 sets x {max(1, int(set_reps * 0.4))} reps")
+        st.write(f"   • 4 sets x {scale_workout(max(1, int(set_reps * 0.4)), current_strength)} reps")
         st.write(f"   • ⏱️ Rest: 2 minuten tussen sets")
         check2 = st.checkbox("✅ Handstand Push-ups afgerond", key="check_handstand")
         
         st.write(f"**3. Tricep Dips (Lichaamsgwicht)**")
         st.write(f"   📝 **Uitvoering:** Gebruik bank/stoel, handen grepen rand, lichaam omlaag tot elbogen 90°, daarna terug omhoog")
-        st.write(f"   • 4 sets x {max(1, int(set_reps * 0.8))} reps")
+        st.write(f"   • 4 sets x {scale_workout(max(1, int(set_reps * 0.8)), current_strength)} reps")
         st.write(f"   • ⏱️ Rest: 60 seconden")
         check3 = st.checkbox("✅ Tricep Dips afgerond", key="check_dips")
         
         st.write(f"**4. Pike Push-ups (KILLER)**")
         st.write(f"   📝 **Uitvoering:** Push-up positie, bil omhoog (omgekeerde V-vorm), elbogen buigen en hoofd naar grond")
-        st.write(f"   • 3 sets x {max(1, int(set_reps * 0.5))} reps")
+        st.write(f"   • 3 sets x {scale_workout(max(1, int(set_reps * 0.5)), current_strength)} reps")
         st.write(f"   • ⏱️ Rest: 90 seconden")
         check4 = st.checkbox("✅ Pike Push-ups afgerond", key="check_pike")
         
@@ -480,7 +639,7 @@ with tab_schema:
         st.success("⚡ **PULL DAY (Rug, Biceps)**")
         
         chinup_record = laatste_max.get("Chin-ups", 5)
-        set_reps = max(1, int(chinup_record * 0.6))
+        set_reps = scale_workout(max(1, int(chinup_record * 0.6)), current_strength)
         
         st.write(f"**1. Chin-ups (HEAVY)**")
         st.write(f"   📝 **Uitvoering:** Handpalmen naar je toe, grip schouderbreedte of nauwer, trek jezelf omhoog tot je kin boven de bar, controleer omlaag")
@@ -491,13 +650,13 @@ with tab_schema:
         
         st.write(f"**2. Hangende Knietillen (ABS BURNER)**")
         st.write(f"   📝 **Uitvoering:** Hang aan pull-up bar, trek kniën omhoog naar borst, controleer omlaag")
-        st.write(f"   • 4 sets x {max(1, int(set_reps * 1.5))} reps")
+        st.write(f"   • 4 sets x {scale_workout(max(1, int(set_reps * 1.5)), current_strength)} reps")
         st.write(f"   • ⏱️ Rest: 90 seconden")
         check2 = st.checkbox("✅ Hangende Knietillen afgerond", key="check_knee")
         
         st.write(f"**3. Inverted Rows (Rug Destroyer)**")
         st.write(f"   📝 **Uitvoering:** Lig onder laag object, greep schouderbreedte, trek jezelf omhoog tot borst object raakt")
-        st.write(f"   • 4 sets x {max(1, int(set_reps * 1.2))} reps")
+        st.write(f"   • 4 sets x {scale_workout(max(1, int(set_reps * 1.2)), current_strength)} reps")
         st.write(f"   • (Onder tafel of laag object)")
         st.write(f"   • ⏱️ Rest: 60 seconden")
         check3 = st.checkbox("✅ Inverted Rows afgerond", key="check_inverted")
@@ -514,7 +673,7 @@ with tab_schema:
         st.success("⚡ **LEGS DAY (Benen, Glutes, Calves)**")
         
         squat_record = laatste_max.get("Pistol Squats", 5)
-        set_reps = max(1, int(squat_record * 0.6))
+        set_reps = scale_workout(max(1, int(squat_record * 0.6)), current_strength)
         
         st.write(f"**1. Pistol Squats (ELITE)**")
         st.write(f"   📝 **Uitvoering:** Sta op één been, ander been recht vooruit, buig steelbeen tot je bijna grond raakt, terug omhoog (gebruik stoel als backup)")
@@ -524,19 +683,19 @@ with tab_schema:
         
         st.write(f"**2. Bulgarian Split Squats (VOLUME)**")
         st.write(f"   📝 **Uitvoering:** Én been verhoogd achter je op bank, buig voorbeen tot 90°, terug omhoog, wissel van been")
-        st.write(f"   • 4 sets x {max(1, int(set_reps * 1.5))} reps per been")
+        st.write(f"   • 4 sets x {scale_workout(max(1, int(set_reps * 1.5)), current_strength)} reps per been")
         st.write(f"   • ⏱️ Rest: 90 seconden")
         check2 = st.checkbox("✅ Bulgarian Split Squats afgerond", key="check_bulgarian")
         
         st.write(f"**3. Jump Squats (EXPLOSIEF)**")
         st.write(f"   📝 **Uitvoering:** Normale squat positie, explosief omhoog springen, land zacht en ga direct omlaag voor volgende rep")
-        st.write(f"   • 3 sets x {max(1, int(set_reps * 1.2))} reps")
+        st.write(f"   • 3 sets x {scale_workout(max(1, int(set_reps * 1.2)), current_strength)} reps")
         st.write(f"   • ⏱️ Rest: 90 seconden")
         check3 = st.checkbox("✅ Jump Squats afgerond", key="check_jumpsquats")
         
         st.write(f"**4. Calf Raises (PUMP)**")
         st.write(f"   📝 **Uitvoering:** Sta op beide voeten, til jezelf op je tenen, controleer omlaag")
-        st.write(f"   • 3 sets x {max(1, int(set_reps * 3))} reps")
+        st.write(f"   • 3 sets x {scale_workout(max(1, int(set_reps * 3)), current_strength)} reps")
         st.write(f"   • ⏱️ Rest: 60 seconden")
         check4 = st.checkbox("✅ Calf Raises afgerond", key="check_calf")
         
@@ -546,7 +705,7 @@ with tab_schema:
         st.success("⚡ **ABS & CORE DAY (Buikspieren, Core Strength)**")
         
         situp_record = laatste_max.get("Sit-ups", 15)
-        set_reps = max(1, int(situp_record * 0.6))
+        set_reps = scale_workout(max(1, int(situp_record * 0.6)), current_strength)
         
         st.write(f"**1. Sit-ups (CLASSIC)**")
         st.write(f"   📝 **Uitvoering:** Lig op rug, voeten op grond/hooked, trek jezelf omhoog tot bovenlichaam 45° hoek, controleer omlaag")
@@ -562,13 +721,13 @@ with tab_schema:
         
         st.write(f"**3. Mountain Climbers (CARDIO ABS)**")
         st.write(f"   📝 **Uitvoering:** Push-up positie, trek afwisselend kniën naar borst in snelle beweging")
-        st.write(f"   • 3 sets x {max(1, int(set_reps * 2))} reps")
+        st.write(f"   • 3 sets x {scale_workout(max(1, int(set_reps * 2)), current_strength)} reps")
         st.write(f"   • ⏱️ Rest: 60 seconden")
         check3 = st.checkbox("✅ Mountain Climbers afgerond", key="check_mountain")
         
         st.write(f"**4. Russian Twists (OBLIQUES)**")
         st.write(f"   📝 **Uitvoering:** Zit met benen gebogen, draai bovenlichaam links en rechts, raak grond beide kanten")
-        st.write(f"   • 3 sets x {max(1, int(set_reps * 1.5))} reps per kant")
+        st.write(f"   • 3 sets x {scale_workout(max(1, int(set_reps * 1.5)), current_strength)} reps per kant")
         st.write(f"   • ⏱️ Rest: 60 seconden")
         check4 = st.checkbox("✅ Russian Twists afgerond", key="check_twists")
         
@@ -626,28 +785,88 @@ with tab_progress:
     col_b1, col_b2, col_b3, col_b4 = st.columns(4)
     with col_b1: 
         badge_c = get_badge(chinups)
-        st.metric("🔗 Chin-ups", badge_c)
+        st.caption("🔗 Chin-ups")
         st.caption(badge_c)
     with col_b2: 
         badge_p = get_badge(pushups)
-        st.metric("👊 Push-ups", badge_p)
+        st.caption("👊 Push-ups")
         st.caption(badge_p)
     with col_b3: 
         badge_ps = get_badge(pistol)
-        st.metric("🦵 Pistol Squats", badge_ps)
+        st.caption("🦵 Pistol Squats")
         st.caption(badge_ps)
     with col_b4: 
         badge_s = get_badge(situps)
-        st.metric("🤸 Sit-ups", badge_s)
+        st.caption("🤸 Sit-ups")
         st.caption(badge_s)
 
-# TAB 7: ACCOUNT & DOELEN BEHEREN
+# TAB 7: SLAAP TRACKER
+with tab_sleep:
+    st.subheader("😴 Slaap Tracker & Recovery Tips")
+    
+    col_s1, col_s2 = st.columns(2)
+    
+    with col_s1:
+        st.write("### 📝 Voeg slaaprecord toe")
+        sleep_hours = st.slider("Hoeveel uur heb je geslapen?", 0.0, 12.0, 8.0, 0.5)
+        sleep_quality = st.slider("Hoe was je slaapkwaliteit? (1-5)", 1, 5, 3)
+        
+        if st.button("💾 Sla slaaprecord op"):
+            sleep_entry = add_sleep_record(sleep_hours, sleep_quality)
+            st.success(f"✅ Slaaprecord opgeslagen!")
+            st.info(f"Sleep Score: **{sleep_entry['score']}/100**")
+            st.rerun()
+    
+    with col_s2:
+        st.write("### 💡 Slaap Tips & Aanbevelingen")
+        if sleep_history:
+            latest_sleep = sleep_history[-1]
+            tips = get_sleep_tips(latest_sleep['uren'], latest_sleep['kwaliteit'])
+            for tip in tips:
+                st.info(tip)
+        else:
+            st.info("📊 Log je slaap om persoonlijke tips te krijgen!")
+    
+    st.write("---")
+    st.subheader("📊 Slaap Voortgang")
+    
+    if sleep_history:
+        df_sleep = pd.DataFrame(sleep_history)
+        
+        col_s_chart1, col_s_chart2 = st.columns(2)
+        
+        with col_s_chart1:
+            st.write("### Slaapuren per nacht")
+            sleep_data = df_sleep[['datum', 'uren']].rename(columns={'datum': 'Datum', 'uren': 'Uren'})
+            st.line_chart(sleep_data.set_index('Datum'))
+        
+        with col_s_chart2:
+            st.write("### Slaapkwaliteit")
+            quality_data = df_sleep[['datum', 'kwaliteit']].rename(columns={'datum': 'Datum', 'kwaliteit': 'Kwaliteit (1-5)'})
+            st.line_chart(quality_data.set_index('Datum'))
+        
+        avg_sleep = df_sleep['uren'].mean()
+        avg_quality = df_sleep['kwaliteit'].mean()
+        
+        st.metric("Gemiddelde slaap", f"{avg_sleep:.1f} uren per nacht")
+        st.metric("Gemiddelde kwaliteit", f"{avg_quality:.1f}/5")
+        
+        if avg_sleep < 6:
+            st.warning("⚠️ Je slaapt gemiddeld minder dan 6 uur. Dit kan je herstel beïnvloeden!")
+        elif avg_sleep > 9:
+            st.warning("⚠️ Je slaapt gemiddeld meer dan 9 uur. Probeer dit aan te passen.")
+        else:
+            st.success("✅ Je slaapt gemiddeld goed!")
+    else:
+        st.info("📝 Start met het loggen van je slaap voor analyses!")
+
+# TAB 8: ACCOUNT & DOELEN BEHEREN
 with tab_account:
     st.subheader("⚙️ Accountinstellingen")
     with st.form("account_form"):
         u_email = st.text_input("E-mailadres", value=u_data["email"])
         u_pass = st.text_input("Wachtwoord", value=u_data["password"])
-        u_age = st.number_input("Leeftijd", min_value=12, value=u_data["leeftijd"])
+        u_birthdate = st.date_input("Geboortedatum", value=datetime.datetime.strptime(u_data["geboortedatum"], "%Y-%m-%d").date() if u_data["geboortedatum"] else datetime.date(2000, 1, 1))
         u_weight = st.number_input("Gewicht (kg)", min_value=30.0, value=u_data["gewicht"])
         u_height = st.number_input("Lengte (cm)", min_value=100, value=u_data["lengte"])
         u_freq = st.selectbox("Sportfrequentie", ["Niet (0 dagen)", "Licht (1-2 dagen)", "Gemiddeld (3-4 dagen)", "Zwaar (5-7 dagen)"], index=2)
@@ -655,8 +874,13 @@ with tab_account:
         
         if st.form_submit_button("Sla profiel permanent op"):
             update_user_db(username, {
-                "email": u_email, "password": u_pass, "leeftijd": u_age,
-                "gewicht": u_weight, "lengte": u_height, "sport_frequentie": u_freq, "doel": u_goal
+                "email": u_email, 
+                "password": u_pass, 
+                "geboortedatum": u_birthdate.strftime("%Y-%m-%d"),
+                "gewicht": u_weight, 
+                "lengte": u_height, 
+                "sport_frequentie": u_freq, 
+                "doel": u_goal
             })
             st.success("✅ Wijzigingen opgeslagen!")
             st.rerun()
@@ -671,7 +895,7 @@ with tab_account:
         st.balloons()
         st.rerun()
 
-# TAB 8: LEADERBOARD
+# TAB 9: LEADERBOARD
 with tab_leaderboard:
     st.subheader("🏆 GigaChad Fitness Leaderboard")
     st.write("---")

@@ -7,6 +7,7 @@ import time
 from PIL import Image
 import base64
 import io
+import random
 
 # --- CONFIGURATIE EN STYLING ---
 st.set_page_config(page_title="GigaChad Ultra Fitness", page_icon="🗿", layout="wide")
@@ -53,8 +54,12 @@ def init_db():
             doel TEXT,
             streak INTEGER DEFAULT 0,
             workout_streak INTEGER DEFAULT 0,
+            sleep_streak INTEGER DEFAULT 0,
+            eating_streak INTEGER DEFAULT 0,
             last_jaw_date TEXT,
             last_workout_date TEXT,
+            last_sleep_date TEXT,
+            last_eating_date TEXT,
             logged_calories INTEGER DEFAULT 0,
             water_intake REAL DEFAULT 0.0,
             laatste_datum TEXT,
@@ -68,29 +73,23 @@ def init_db():
     conn.commit()
     
     # DATABASE MIGRATION: Add missing columns for existing users
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN geboortedatum TEXT")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass  # Column already exists
+    migrations = [
+        ("geboortedatum", "TEXT"),
+        ("sleep_history", "TEXT DEFAULT '[]'"),
+        ("strength_level", "TEXT DEFAULT 'Gemiddeld'"),
+        ("last_strength_date", "TEXT"),
+        ("sleep_streak", "INTEGER DEFAULT 0"),
+        ("eating_streak", "INTEGER DEFAULT 0"),
+        ("last_sleep_date", "TEXT"),
+        ("last_eating_date", "TEXT"),
+    ]
     
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN sleep_history TEXT DEFAULT '[]'")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
-    
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN strength_level TEXT DEFAULT 'Gemiddeld'")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
-    
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN last_strength_date TEXT")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
+    for col_name, col_type in migrations:
+        try:
+            cursor.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
     
     # Set default birthdates for existing users without one
     default_birthdate = (datetime.date.today() - datetime.timedelta(days=365*20)).strftime("%Y-%m-%d")
@@ -125,7 +124,7 @@ def get_user(username):
 
 def get_all_users():
     conn = get_db_connection()
-    users = conn.execute("SELECT username, streak, workout_streak FROM users ORDER BY streak DESC").fetchall()
+    users = conn.execute("SELECT username, streak, workout_streak, sleep_streak, eating_streak FROM users ORDER BY streak DESC").fetchall()
     conn.close()
     return users
 
@@ -158,8 +157,12 @@ def reset_account(username):
         UPDATE users SET 
         streak = 0,
         workout_streak = 0,
+        sleep_streak = 0,
+        eating_streak = 0,
         last_jaw_date = NULL,
         last_workout_date = NULL,
+        last_sleep_date = NULL,
+        last_eating_date = NULL,
         logged_calories = 0,
         water_intake = 0.0,
         weight_history = '[]',
@@ -173,6 +176,12 @@ def reset_account(username):
 # --- INLOG EN APPARAAT ONTHOUD LOGICA ---
 if "user_session" not in st.session_state:
     st.session_state.user_session = None
+if "sleep_active" not in st.session_state:
+    st.session_state.sleep_active = False
+if "wake_events" not in st.session_state:
+    st.session_state.wake_events = 0
+if "sleep_start_time" not in st.session_state:
+    st.session_state.sleep_start_time = None
 
 # --- SCHERM 1: RECON / INLOGGEN / REGISTREREN ---
 if st.session_state.user_session is None:
@@ -275,7 +284,7 @@ if st.sidebar.button("🔒 Uitloggen op dit apparaat"):
     st.session_state.user_session = None
     st.rerun()
 
-# --- BADGE FUNCTIE ---
+# --- BADGE FUNCTIE (KRACHT BADGES) ---
 def get_badge(reps):
     if reps >= 100: return "👑 Titanium God (100+)"
     elif reps >= 90: return "⚔️ Onstopbare Krijger (90+)"
@@ -290,6 +299,37 @@ def get_badge(reps):
     elif reps >= 5: return "🌱 Groeiend Talent (5+)"
     elif reps >= 1: return "👟 Starter (1+)"
     return "🔒 Geen Badge"
+
+# --- SLEEP BADGE FUNCTIE ---
+def get_sleep_badge(hours, quality):
+    score = (hours / 8) * 100 * (quality / 5)
+    if score >= 90: return "😴 Perfect Slaper (90+)"
+    elif score >= 80: return "🌙 Sleep Master (80+)"
+    elif score >= 70: return "💤 Rest Champion (70+)"
+    elif score >= 60: return "🛏️ Goed Geslapen (60+)"
+    elif score >= 50: return "😴 Vast Geslapen (50+)"
+    elif score >= 30: return "🌙 Slaper (30+)"
+    else: return "😵 Slaaplos (0+)"
+
+# --- EATING STREAK BADGE FUNCTIE ---
+def get_eating_badge(streak_days):
+    if streak_days >= 30: return "🍽️ Voeding Champion (30+ dagen)"
+    elif streak_days >= 21: return "🥗 Gezonde Eter (21+ dagen)"
+    elif streak_days >= 14: return "🍎 Consistent (14+ dagen)"
+    elif streak_days >= 7: return "💪 Beginner (7+ dagen)"
+    elif streak_days >= 1: return "🚀 Start (1+ dag)"
+    return "🔒 Start je journey"
+
+# --- STREAK BADGE FUNCTIE ---
+def get_streak_badge(streak_days):
+    if streak_days >= 100: return "🔥 Legendarisch (100+ dagen)"
+    elif streak_days >= 60: return "⚡ Monster (60+ dagen)"
+    elif streak_days >= 30: return "💪 Champion (30+ dagen)"
+    elif streak_days >= 21: return "🌟 Dedicated (21+ dagen)"
+    elif streak_days >= 14: return "🚀 Momentum (14+ dagen)"
+    elif streak_days >= 7: return "✨ Week Warrior (7+ dagen)"
+    elif streak_days >= 1: return "🏁 Started (1+ dag)"
+    return "🔒 Begin vandaag"
 
 # --- ADVANCED FOOD ANALYZER ---
 def analyze_food_image(image):
@@ -362,13 +402,14 @@ def scale_workout(base_reps, strength_level):
     return base_reps
 
 # --- SLAAP TRACKER SYSTEM ---
-def add_sleep_record(hours, quality):
-    """Voeg slaaprecord toe"""
+def add_sleep_record(hours, quality, wake_interruptions=0):
+    """Voeg slaaprecord toe met wakker worden events"""
     sleep_entry = {
         "datum": str(vandaag_datum),
         "uren": hours,
         "kwaliteit": quality,
-        "score": int((hours / 8) * 100 * (quality / 5))
+        "wake_interruptions": wake_interruptions,
+        "score": int((hours / 8) * 100 * (quality / 5) * max(0.5, 1 - (wake_interruptions * 0.1)))
     }
     sleep_history.append(sleep_entry)
     update_user_db(username, {"sleep_history": json.dumps(sleep_history)})
@@ -412,6 +453,14 @@ with tab_dash:
         st.metric(label="🔥 Kaaklijn Streak", value=f"{u_data['streak']} Dagen")
     with col4:
         st.metric(label="⚡ Workout Streak", value=f"{u_data['workout_streak']} Dagen")
+
+    col5, col6, col7 = st.columns(3)
+    with col5:
+        st.metric(label="😴 Sleep Streak", value=f"{u_data['sleep_streak']} Dagen")
+    with col6:
+        st.metric(label="🍽️ Eating Streak", value=f"{u_data['eating_streak']} Dagen")
+    with col7:
+        st.metric(label="🌟 Total Streaks", value=f"{u_data['streak'] + u_data['workout_streak'] + u_data['sleep_streak'] + u_data['eating_streak']}")
 
     st.write("---")
     
@@ -506,6 +555,14 @@ with tab_food:
                     "logged_calories": new_logged_calories
                 })
                 st.success(f"✅ {manual_calories} kcal toegevoegd!")
+                
+                # Verhoog eating streak
+                if u_data["last_eating_date"] != str(vandaag_datum):
+                    neue_eating_streak = u_data["eating_streak"] + 1
+                    update_user_db(username, {
+                        "eating_streak": neue_eating_streak,
+                        "last_eating_date": str(vandaag_datum)
+                    })
                 st.rerun()
             else:
                 st.warning("Voer calorieën in!")
@@ -795,30 +852,102 @@ with tab_progress:
 
 # TAB 7: SLAAP TRACKER
 with tab_sleep:
-    st.subheader("😴 Slaap Tracker & Recovery Tips")
+    st.subheader("😴 Slaap Tracker met Bewegingsdetectie")
     
     col_s1, col_s2 = st.columns(2)
     
     with col_s1:
-        st.write("### 📝 Voeg slaaprecord toe")
+        st.write("### 🌙 Start je slaapsessie")
+        st.info("Klik onderaan de knop 'Start Sleep Session' en de app meet automatisch je slaappatroon. Klik 'Wakker!' elke keer als je wakker bent.")
+        
+        if st.button("🛏️ START SLEEP SESSION", key="sleep_start"):
+            st.session_state.sleep_active = True
+            st.session_state.sleep_start_time = datetime.datetime.now()
+            st.session_state.wake_events = 0
+            st.success("✅ Sleep tracking gestart! Slaap lekker! 😴")
+            st.rerun()
+        
+        if st.session_state.sleep_active:
+            st.write("---")
+            st.warning("😴 JE SLAAPT NU...")
+            
+            if st.session_state.sleep_start_time:
+                elapsed = (datetime.datetime.now() - st.session_state.sleep_start_time).total_seconds() / 3600
+                st.metric("⏱️ Slaap duur", f"{elapsed:.1f} uur")
+                st.metric("🔔 Wakker geweest", f"{st.session_state.wake_events} keer")
+            
+            col_wake1, col_wake2, col_wake3 = st.columns(3)
+            with col_wake1:
+                if st.button("😴 Wakker! (Beweging)", key="wake_event"):
+                    st.session_state.wake_events += 1
+                    st.info(f"📍 Beweging geregistreerd! ({st.session_state.wake_events}x)")
+                    st.rerun()
+            
+            with col_wake2:
+                if st.button("💤 Slaap verder", key="sleep_more"):
+                    st.info("✅ Goed bezig! Slaap lekker")
+            
+            with col_wake3:
+                if st.button("⏹️ STOP SLEEP TRACKER", key="sleep_stop"):
+                    if st.session_state.sleep_start_time:
+                        total_sleep_hours = (datetime.datetime.now() - st.session_state.sleep_start_time).total_seconds() / 3600
+                        st.success("🌅 Goedemorgen! Sleep sessie beëindigd!")
+                        st.write("---")
+                        
+                        col_quality1, col_quality2 = st.columns(2)
+                        with col_quality1:
+                            sleep_quality = st.slider("Hoe was je slaapkwaliteit? (1-5)", 1, 5, 3, key="sleep_quality_final")
+                        with col_quality2:
+                            st.info(f"⏱️ Totaal geslapen: **{total_sleep_hours:.1f} uur**")
+                            st.info(f"🔔 Wakker geweest: **{st.session_state.wake_events}x**")
+                        
+                        if st.button("✅ Slaap Opslaan", key="save_sleep_final"):
+                            sleep_entry = add_sleep_record(total_sleep_hours, sleep_quality, st.session_state.wake_events)
+                            
+                            # Verhoog sleep streak
+                            if u_data["last_sleep_date"] != str(vandaag_datum):
+                                new_sleep_streak = u_data["sleep_streak"] + 1
+                                update_user_db(username, {
+                                    "sleep_streak": new_sleep_streak,
+                                    "last_sleep_date": str(vandaag_datum)
+                                })
+                            
+                            st.success(f"✅ Slaap opgeslagen! Sleep Score: **{sleep_entry['score']}/100**")
+                            st.balloons()
+                            st.session_state.sleep_active = False
+                            time.sleep(2)
+                            st.rerun()
+    
+    with col_s2:
+        st.write("### 📝 Handmatig Invoeren (Zonder Tracking)")
         sleep_hours = st.slider("Hoeveel uur heb je geslapen?", 0.0, 12.0, 8.0, 0.5)
         sleep_quality = st.slider("Hoe was je slaapkwaliteit? (1-5)", 1, 5, 3)
+        wake_interruptions = st.number_input("Hoeveel keer ben je wakker geweest?", 0, 20, 0)
         
-        if st.button("💾 Sla slaaprecord op"):
-            sleep_entry = add_sleep_record(sleep_hours, sleep_quality)
+        if st.button("💾 Sla slaaprecord op (Handmatig)"):
+            sleep_entry = add_sleep_record(sleep_hours, sleep_quality, wake_interruptions)
+            
+            # Verhoog sleep streak
+            if u_data["last_sleep_date"] != str(vandaag_datum):
+                new_sleep_streak = u_data["sleep_streak"] + 1
+                update_user_db(username, {
+                    "sleep_streak": new_sleep_streak,
+                    "last_sleep_date": str(vandaag_datum)
+                })
+            
             st.success(f"✅ Slaaprecord opgeslagen!")
             st.info(f"Sleep Score: **{sleep_entry['score']}/100**")
             st.rerun()
     
-    with col_s2:
-        st.write("### 💡 Slaap Tips & Aanbevelingen")
-        if sleep_history:
-            latest_sleep = sleep_history[-1]
-            tips = get_sleep_tips(latest_sleep['uren'], latest_sleep['kwaliteit'])
-            for tip in tips:
-                st.info(tip)
-        else:
-            st.info("📊 Log je slaap om persoonlijke tips te krijgen!")
+    st.write("---")
+    st.subheader("💡 Slaap Tips & Aanbevelingen")
+    if sleep_history:
+        latest_sleep = sleep_history[-1]
+        tips = get_sleep_tips(latest_sleep['uren'], latest_sleep['kwaliteit'])
+        for tip in tips:
+            st.info(tip)
+    else:
+        st.info("📊 Log je slaap om persoonlijke tips te krijgen!")
     
     st.write("---")
     st.subheader("📊 Slaap Voortgang")
@@ -840,9 +969,15 @@ with tab_sleep:
         
         avg_sleep = df_sleep['uren'].mean()
         avg_quality = df_sleep['kwaliteit'].mean()
+        avg_wakes = df_sleep['wake_interruptions'].mean() if 'wake_interruptions' in df_sleep.columns else 0
         
-        st.metric("Gemiddelde slaap", f"{avg_sleep:.1f} uren per nacht")
-        st.metric("Gemiddelde kwaliteit", f"{avg_quality:.1f}/5")
+        col_metric1, col_metric2, col_metric3 = st.columns(3)
+        with col_metric1:
+            st.metric("Gemiddelde slaap", f"{avg_sleep:.1f} uren")
+        with col_metric2:
+            st.metric("Gemiddelde kwaliteit", f"{avg_quality:.1f}/5")
+        with col_metric3:
+            st.metric("Gemiddeld wakker", f"{avg_wakes:.1f}x")
         
         if avg_sleep < 6:
             st.warning("⚠️ Je slaapt gemiddeld minder dan 6 uur. Dit kan je herstel beïnvloeden!")
@@ -856,80 +991,176 @@ with tab_sleep:
 # TAB 8: BADGES
 with tab_badges:
     st.subheader("🏅 Jouw Badge Collectie")
-    st.write("Verzamel badges door je trainingsrecords op te voeren!")
     
-    st.write("---")
+    # Badges Categorieen
+    tab_strength_badges, tab_sleep_badges, tab_eating_badges, tab_streak_badges = st.tabs(
+        ["💪 Kracht Badges", "😴 Slaap Badges", "🍽️ Eten Badges", "🔥 Streak Badges"]
+    )
     
-    # Haal latest records
-    laatste_max = max_history[-1] if max_history else {"Chin-ups": 5, "Push-ups": 20, "Pistol Squats": 5, "Sit-ups": 15}
+    # KRACHT BADGES
+    with tab_strength_badges:
+        st.write("Verzamel badges door je trainingsrecords op te voeren!")
+        st.write("---")
+        
+        laatste_max = max_history[-1] if max_history else {"Chin-ups": 5, "Push-ups": 20, "Pistol Squats": 5, "Sit-ups": 15}
+        
+        col_b1, col_b2, col_b3, col_b4 = st.columns(4)
+        
+        with col_b1:
+            badge_chinups = get_badge(laatste_max.get("Chin-ups", 0))
+            st.markdown("""
+            <div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px;'>
+                <h2>🔗</h2>
+                <h3>Chin-ups</h3>
+                <p style='font-size: 12px;'>{}</p>
+                <p style='font-weight: bold;'>{} reps</p>
+            </div>
+            """.format(badge_chinups, laatste_max.get("Chin-ups", 0)), unsafe_allow_html=True)
+        
+        with col_b2:
+            badge_pushups = get_badge(laatste_max.get("Push-ups", 0))
+            st.markdown("""
+            <div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 10px;'>
+                <h2>👊</h2>
+                <h3>Push-ups</h3>
+                <p style='font-size: 12px;'>{}</p>
+                <p style='font-weight: bold;'>{} reps</p>
+            </div>
+            """.format(badge_pushups, laatste_max.get("Push-ups", 0)), unsafe_allow_html=True)
+        
+        with col_b3:
+            badge_pistol = get_badge(laatste_max.get("Pistol Squats", 0))
+            st.markdown("""
+            <div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border-radius: 10px;'>
+                <h2>🦵</h2>
+                <h3>Pistol Squats</h3>
+                <p style='font-size: 12px;'>{}</p>
+                <p style='font-weight: bold;'>{} reps</p>
+            </div>
+            """.format(badge_pistol, laatste_max.get("Pistol Squats", 0)), unsafe_allow_html=True)
+        
+        with col_b4:
+            badge_situps = get_badge(laatste_max.get("Sit-ups", 0))
+            st.markdown("""
+            <div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); border-radius: 10px;'>
+                <h2>🤸</h2>
+                <h3>Sit-ups</h3>
+                <p style='font-size: 12px;'>{}</p>
+                <p style='font-weight: bold;'>{} reps</p>
+            </div>
+            """.format(badge_situps, laatste_max.get("Sit-ups", 0)), unsafe_allow_html=True)
+        
+        st.write("---")
+        st.write("**Badge Levels (Progression)**")
+        
+        badge_levels = [
+            (1, "👟 Starter"),
+            (5, "🌱 Groeiend Talent"),
+            (10, "🥈 Sterke Atleet"),
+            (20, "🥇 Kampioen"),
+            (30, "⭐ Elite Krijger"),
+            (40, "🏆 Legendarisch"),
+            (50, "🚀 Superhuman"),
+            (60, "💪 Iron Giant"),
+            (70, "🔥 Beast Mode"),
+            (80, "👑 Koning der Kracht"),
+            (90, "⚔️ Onstopbare Krijger"),
+            (100, "👑 Titanium God"),
+        ]
+        
+        for reps, badge_name in badge_levels:
+            st.write(f"**{reps}+ reps:** {badge_name}")
     
-    # Display badges in grid
-    col_b1, col_b2, col_b3, col_b4 = st.columns(4)
+    # SLAAP BADGES
+    with tab_sleep_badges:
+        st.write("Verdien badges door goed te slapen!")
+        st.write("---")
+        
+        if sleep_history:
+            latest_sleep = sleep_history[-1]
+            sleep_badge = get_sleep_badge(latest_sleep['uren'], latest_sleep['kwaliteit'])
+            sleep_score = latest_sleep['score']
+            
+            st.markdown(f"""
+            <div style='text-align: center; padding: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px;'>
+                <h2>😴</h2>
+                <h2>{sleep_badge}</h2>
+                <p style='font-size: 14px; font-weight: bold;'>Sleep Score: {sleep_score}/100</p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.info("Nog geen slaapgegevens. Begin met slapen tracken!")
+        
+        st.write("---")
+        st.write("**Slaap Badge Levels**")
+        sleep_badge_levels = [
+            (0, "😵 Slaaplos"),
+            (30, "🌙 Slaper"),
+            (50, "😴 Vast Geslapen"),
+            (60, "🛏️ Goed Geslapen"),
+            (70, "💤 Rest Champion"),
+            (80, "🌙 Sleep Master"),
+            (90, "😴 Perfect Slaper"),
+        ]
+        for score, badge_name in sleep_badge_levels:
+            st.write(f"**{score}+ score:** {badge_name}")
     
-    with col_b1:
-        badge_chinups = get_badge(laatste_max.get("Chin-ups", 0))
-        st.markdown("""
-        <div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px;'>
-            <h2>🔗</h2>
-            <h3>Chin-ups</h3>
-            <p style='font-size: 12px;'>{}</p>
-            <p style='font-weight: bold;'>{} reps</p>
+    # ETEN BADGES
+    with tab_eating_badges:
+        st.write("Verdien badges door consistent te eten!")
+        st.write("---")
+        
+        eating_badge = get_eating_badge(u_data['eating_streak'])
+        
+        st.markdown(f"""
+        <div style='text-align: center; padding: 30px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 10px;'>
+            <h2>🍽️</h2>
+            <h2>{eating_badge}</h2>
+            <p style='font-size: 14px; font-weight: bold;'>Eet Streak: {u_data['eating_streak']} dagen</p>
         </div>
-        """.format(badge_chinups, laatste_max.get("Chin-ups", 0)), unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+        
+        st.write("---")
+        st.write("**Eten Badge Levels**")
+        eating_badge_levels = [
+            (0, "🔒 Start je journey"),
+            (1, "🚀 Start (1+ dag)"),
+            (7, "💪 Beginner (7+ dagen)"),
+            (14, "🍎 Consistent (14+ dagen)"),
+            (21, "🥗 Gezonde Eter (21+ dagen)"),
+            (30, "🍽️ Voeding Champion (30+ dagen)"),
+        ]
+        for days, badge_name in eating_badge_levels:
+            st.write(f"**{days}+ dagen:** {badge_name}")
     
-    with col_b2:
-        badge_pushups = get_badge(laatste_max.get("Push-ups", 0))
-        st.markdown("""
-        <div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 10px;'>
-            <h2>👊</h2>
-            <h3>Push-ups</h3>
-            <p style='font-size: 12px;'>{}</p>
-            <p style='font-weight: bold;'>{} reps</p>
+    # STREAK BADGES
+    with tab_streak_badges:
+        st.write("Verdien badges door streaks vol te houden!")
+        st.write("---")
+        
+        streak_badge = get_streak_badge(u_data['streak'])
+        
+        st.markdown(f"""
+        <div style='text-align: center; padding: 30px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border-radius: 10px;'>
+            <h2>🔥</h2>
+            <h2>{streak_badge}</h2>
+            <p style='font-size: 14px; font-weight: bold;'>Streak: {u_data['streak']} dagen</p>
         </div>
-        """.format(badge_pushups, laatste_max.get("Push-ups", 0)), unsafe_allow_html=True)
-    
-    with col_b3:
-        badge_pistol = get_badge(laatste_max.get("Pistol Squats", 0))
-        st.markdown("""
-        <div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border-radius: 10px;'>
-            <h2>🦵</h2>
-            <h3>Pistol Squats</h3>
-            <p style='font-size: 12px;'>{}</p>
-            <p style='font-weight: bold;'>{} reps</p>
-        </div>
-        """.format(badge_pistol, laatste_max.get("Pistol Squats", 0)), unsafe_allow_html=True)
-    
-    with col_b4:
-        badge_situps = get_badge(laatste_max.get("Sit-ups", 0))
-        st.markdown("""
-        <div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); border-radius: 10px;'>
-            <h2>🤸</h2>
-            <h3>Sit-ups</h3>
-            <p style='font-size: 12px;'>{}</p>
-            <p style='font-weight: bold;'>{} reps</p>
-        </div>
-        """.format(badge_situps, laatste_max.get("Sit-ups", 0)), unsafe_allow_html=True)
-    
-    st.write("---")
-    st.subheader("🎯 Badge Levels (Progression)")
-    
-    badge_levels = [
-        (1, "👟 Starter"),
-        (5, "🌱 Groeiend Talent"),
-        (10, "🥈 Sterke Atleet"),
-        (20, "🥇 Kampioen"),
-        (30, "⭐ Elite Krijger"),
-        (40, "🏆 Legendarisch"),
-        (50, "🚀 Superhuman"),
-        (60, "💪 Iron Giant"),
-        (70, "🔥 Beast Mode"),
-        (80, "👑 Koning der Kracht"),
-        (90, "⚔️ Onstopbare Krijger"),
-        (100, "👑 Titanium God"),
-    ]
-    
-    for reps, badge_name in badge_levels:
-        st.write(f"**{reps}+ reps:** {badge_name}")
+        """, unsafe_allow_html=True)
+        
+        st.write("---")
+        st.write("**Streak Badge Levels**")
+        streak_badge_levels = [
+            (1, "🏁 Started (1+ dag)"),
+            (7, "✨ Week Warrior (7+ dagen)"),
+            (14, "🚀 Momentum (14+ dagen)"),
+            (21, "🌟 Dedicated (21+ dagen)"),
+            (30, "💪 Champion (30+ dagen)"),
+            (60, "⚡ Monster (60+ dagen)"),
+            (100, "🔥 Legendarisch (100+ dagen)"),
+        ]
+        for days, badge_name in streak_badge_levels:
+            st.write(f"**{days}+ dagen:** {badge_name}")
 
 # TAB 9: ACCOUNT & DOELEN
 with tab_account:
@@ -995,62 +1226,129 @@ with tab_leaderboard:
     all_users = get_all_users()
     
     if all_users:
+        # TABS for different leaderboards
+        lb_tab1, lb_tab2, lb_tab3, lb_tab4 = st.tabs(
+            ["🗿 Kaaklijn", "⚡ Workouts", "😴 Slapen", "🍽️ Eten"]
+        )
+        
         # Jaw Streak Leaderboard
-        st.write("### 🗿 Kaaklijn Streak Kampioen")
-        jaw_data = sorted(all_users, key=lambda x: x["streak"], reverse=True)
-        
-        col_rank, col_user, col_days = st.columns([1, 2, 2])
-        with col_rank:
-            st.write("**Rang**")
-        with col_user:
-            st.write("**Gebruiker**")
-        with col_days:
-            st.write("**Streak (Dagen)**")
-        
-        st.write("---")
-        for idx, user in enumerate(jaw_data[:10], 1):
+        with lb_tab1:
+            st.write("### 🗿 Kaaklijn Streak Kampioen")
+            jaw_data = sorted(all_users, key=lambda x: x["streak"], reverse=True)
+            
             col_rank, col_user, col_days = st.columns([1, 2, 2])
             with col_rank:
-                if idx == 1:
-                    st.write(f"🥇 #{idx}")
-                elif idx == 2:
-                    st.write(f"🥈 #{idx}")
-                elif idx == 3:
-                    st.write(f"🥉 #{idx}")
-                else:
-                    st.write(f"#{idx}")
+                st.write("**Rang**")
             with col_user:
-                st.write(f"**{user['username']}**")
+                st.write("**Gebruiker**")
             with col_days:
-                st.metric("", f"{user['streak']} 🔥")
+                st.write("**Streak (Dagen)**")
+            
+            st.write("---")
+            for idx, user in enumerate(jaw_data[:10], 1):
+                col_rank, col_user, col_days = st.columns([1, 2, 2])
+                with col_rank:
+                    if idx == 1:
+                        st.write(f"🥇 #{idx}")
+                    elif idx == 2:
+                        st.write(f"🥈 #{idx}")
+                    elif idx == 3:
+                        st.write(f"🥉 #{idx}")
+                    else:
+                        st.write(f"#{idx}")
+                with col_user:
+                    st.write(f"**{user['username']}**")
+                with col_days:
+                    st.metric("", f"{user['streak']} 🔥")
         
-        st.write("---")
-        st.write("### ⚡ Workout Streak Kampioen")
-        workout_data = sorted(all_users, key=lambda x: x["workout_streak"], reverse=True)
-        
-        col_rank, col_user, col_days = st.columns([1, 2, 2])
-        with col_rank:
-            st.write("**Rang**")
-        with col_user:
-            st.write("**Gebruiker**")
-        with col_days:
-            st.write("**Streak (Dagen)**")
-        
-        st.write("---")
-        for idx, user in enumerate(workout_data[:10], 1):
+        # Workout Streak Leaderboard
+        with lb_tab2:
+            st.write("### ⚡ Workout Streak Kampioen")
+            workout_data = sorted(all_users, key=lambda x: x["workout_streak"], reverse=True)
+            
             col_rank, col_user, col_days = st.columns([1, 2, 2])
             with col_rank:
-                if idx == 1:
-                    st.write(f"🥇 #{idx}")
-                elif idx == 2:
-                    st.write(f"🥈 #{idx}")
-                elif idx == 3:
-                    st.write(f"🥉 #{idx}")
-                else:
-                    st.write(f"#{idx}")
+                st.write("**Rang**")
             with col_user:
-                st.write(f"**{user['username']}**")
+                st.write("**Gebruiker**")
             with col_days:
-                st.metric("", f"{user['workout_streak']} ⚡")
+                st.write("**Streak (Dagen)**")
+            
+            st.write("---")
+            for idx, user in enumerate(workout_data[:10], 1):
+                col_rank, col_user, col_days = st.columns([1, 2, 2])
+                with col_rank:
+                    if idx == 1:
+                        st.write(f"🥇 #{idx}")
+                    elif idx == 2:
+                        st.write(f"🥈 #{idx}")
+                    elif idx == 3:
+                        st.write(f"🥉 #{idx}")
+                    else:
+                        st.write(f"#{idx}")
+                with col_user:
+                    st.write(f"**{user['username']}**")
+                with col_days:
+                    st.metric("", f"{user['workout_streak']} ⚡")
+        
+        # Sleep Streak Leaderboard
+        with lb_tab3:
+            st.write("### 😴 Sleep Streak Kampioen")
+            sleep_data = sorted(all_users, key=lambda x: x["sleep_streak"], reverse=True)
+            
+            col_rank, col_user, col_days = st.columns([1, 2, 2])
+            with col_rank:
+                st.write("**Rang**")
+            with col_user:
+                st.write("**Gebruiker**")
+            with col_days:
+                st.write("**Streak (Dagen)**")
+            
+            st.write("---")
+            for idx, user in enumerate(sleep_data[:10], 1):
+                col_rank, col_user, col_days = st.columns([1, 2, 2])
+                with col_rank:
+                    if idx == 1:
+                        st.write(f"🥇 #{idx}")
+                    elif idx == 2:
+                        st.write(f"🥈 #{idx}")
+                    elif idx == 3:
+                        st.write(f"🥉 #{idx}")
+                    else:
+                        st.write(f"#{idx}")
+                with col_user:
+                    st.write(f"**{user['username']}**")
+                with col_days:
+                    st.metric("", f"{user['sleep_streak']} 😴")
+        
+        # Eating Streak Leaderboard
+        with lb_tab4:
+            st.write("### 🍽️ Eating Streak Kampioen")
+            eating_data = sorted(all_users, key=lambda x: x["eating_streak"], reverse=True)
+            
+            col_rank, col_user, col_days = st.columns([1, 2, 2])
+            with col_rank:
+                st.write("**Rang**")
+            with col_user:
+                st.write("**Gebruiker**")
+            with col_days:
+                st.write("**Streak (Dagen)**")
+            
+            st.write("---")
+            for idx, user in enumerate(eating_data[:10], 1):
+                col_rank, col_user, col_days = st.columns([1, 2, 2])
+                with col_rank:
+                    if idx == 1:
+                        st.write(f"🥇 #{idx}")
+                    elif idx == 2:
+                        st.write(f"🥈 #{idx}")
+                    elif idx == 3:
+                        st.write(f"🥉 #{idx}")
+                    else:
+                        st.write(f"#{idx}")
+                with col_user:
+                    st.write(f"**{user['username']}**")
+                with col_days:
+                    st.metric("", f"{user['eating_streak']} 🍽️")
     else:
         st.info("📊 Nog geen gebruikers op het leaderboard!")

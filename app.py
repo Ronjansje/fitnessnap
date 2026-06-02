@@ -974,7 +974,7 @@ with tab_badges:
             <p style='font-size: 12px;'>{}</p>
             <p style='font-weight: bold;'>{} reps</p>
         </div>
-        """.format(badge_pushups, grootste_max.get("Push-ups", 0)), unsafe_allow_html=True)
+        """.format(badge_pushups, laatste_max.get("Push-ups", 0)), unsafe_allow_html=True)
     
     with col_b3:
         badge_pistol = get_badge(laatste_max.get("Pistol Squats", 0))

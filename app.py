@@ -395,8 +395,8 @@ def get_sleep_tips(hours, quality):
     return tips
 
 # --- HOOFDMENU TABS ---
-tab_dash, tab_food, tab_water, tab_kaak, tab_schema, tab_progress, tab_sleep, tab_account, tab_leaderboard = st.tabs([
-    "📊 Dashboard", "📸 Foto Scanner", "💧 Water Tracker", "🗿 Kaaklijn Trainer", "🏋️ Trainingsschema", "📈 Voortgang & Metingen", "😴 Slaap Tracker", "⚙️ Account & Doelen", "🏆 Leaderboard"
+tab_dash, tab_food, tab_water, tab_kaak, tab_schema, tab_progress, tab_sleep, tab_badges, tab_account, tab_leaderboard = st.tabs([
+    "📊 Dashboard", "📸 Foto Scanner", "💧 Water Tracker", "🗿 Kaaklijn Trainer", "🏋️ Trainingsschema", "📈 Voortgang & Metingen", "😴 Slaap Tracker", "🏅 Badges", "⚙️ Account & Doelen", "🏆 Leaderboard"
 ])
 
 # TAB 1: DASHBOARD
@@ -433,29 +433,6 @@ with tab_dash:
             st.info("⚖️ Je gewicht is stabiel. Goed bezig!")
     else:
         st.info("📊 Voeg metingen toe om gewichtsvoortgang te zien!")
-
-    st.write("---")
-    st.subheader("🏆 Jouw Huidige Badges")
-    
-    laatste_max = max_history[-1] if max_history else {"Chin-ups": 5, "Push-ups": 20, "Pistol Squats": 5, "Sit-ups": 15}
-    
-    col_b1, col_b2, col_b3, col_b4 = st.columns(4)
-    with col_b1:
-        badge_chinups = get_badge(laatste_max.get("Chin-ups", 0))
-        st.caption("🔗 Chin-ups")
-        st.caption(badge_chinups)
-    with col_b2:
-        badge_pushups = get_badge(laatste_max.get("Push-ups", 0))
-        st.caption("👊 Push-ups")
-        st.caption(badge_pushups)
-    with col_b3:
-        badge_pistol = get_badge(laatste_max.get("Pistol Squats", 0))
-        st.caption("🦵 Pistol Squats")
-        st.caption(badge_pistol)
-    with col_b4:
-        badge_situps = get_badge(laatste_max.get("Sit-ups", 0))
-        st.caption("🤸 Sit-ups")
-        st.caption(badge_situps)
 
     st.write("---")
     st.subheader("📈 Voortgangsdiagrammen")
@@ -815,26 +792,6 @@ with tab_progress:
         })
         st.success("✅ Metingen permanent opgeslagen!")
         st.rerun()
-    
-    st.write("---")
-    st.write("### 🏆 Jouw Huidige Badge Niveaus:")
-    col_b1, col_b2, col_b3, col_b4 = st.columns(4)
-    with col_b1: 
-        badge_c = get_badge(chinups)
-        st.caption("🔗 Chin-ups")
-        st.caption(badge_c)
-    with col_b2: 
-        badge_p = get_badge(pushups)
-        st.caption("👊 Push-ups")
-        st.caption(badge_p)
-    with col_b3: 
-        badge_ps = get_badge(pistol)
-        st.caption("🦵 Pistol Squats")
-        st.caption(badge_ps)
-    with col_b4: 
-        badge_s = get_badge(situps)
-        st.caption("🤸 Sit-ups")
-        st.caption(badge_s)
 
 # TAB 7: SLAAP TRACKER
 with tab_sleep:
@@ -896,34 +853,129 @@ with tab_sleep:
     else:
         st.info("📝 Start met het loggen van je slaap voor analyses!")
 
-# TAB 8: ACCOUNT & DOELEN BEHEREN
+# TAB 8: BADGES
+with tab_badges:
+    st.subheader("🏅 Jouw Badge Collectie")
+    st.write("Verzamel badges door je trainingsrecords op te voeren!")
+    
+    st.write("---")
+    
+    # Haal latest records
+    laatste_max = max_history[-1] if max_history else {"Chin-ups": 5, "Push-ups": 20, "Pistol Squats": 5, "Sit-ups": 15}
+    
+    # Display badges in grid
+    col_b1, col_b2, col_b3, col_b4 = st.columns(4)
+    
+    with col_b1:
+        badge_chinups = get_badge(laatste_max.get("Chin-ups", 0))
+        st.markdown("""
+        <div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px;'>
+            <h2>🔗</h2>
+            <h3>Chin-ups</h3>
+            <p style='font-size: 12px;'>{}</p>
+            <p style='font-weight: bold;'>{} reps</p>
+        </div>
+        """.format(badge_chinups, laatste_max.get("Chin-ups", 0)), unsafe_allow_html=True)
+    
+    with col_b2:
+        badge_pushups = get_badge(laatste_max.get("Push-ups", 0))
+        st.markdown("""
+        <div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 10px;'>
+            <h2>👊</h2>
+            <h3>Push-ups</h3>
+            <p style='font-size: 12px;'>{}</p>
+            <p style='font-weight: bold;'>{} reps</p>
+        </div>
+        """.format(badge_pushups, laatste_max.get("Push-ups", 0)), unsafe_allow_html=True)
+    
+    with col_b3:
+        badge_pistol = get_badge(laatste_max.get("Pistol Squats", 0))
+        st.markdown("""
+        <div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border-radius: 10px;'>
+            <h2>🦵</h2>
+            <h3>Pistol Squats</h3>
+            <p style='font-size: 12px;'>{}</p>
+            <p style='font-weight: bold;'>{} reps</p>
+        </div>
+        """.format(badge_pistol, laatste_max.get("Pistol Squats", 0)), unsafe_allow_html=True)
+    
+    with col_b4:
+        badge_situps = get_badge(laatste_max.get("Sit-ups", 0))
+        st.markdown("""
+        <div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); border-radius: 10px;'>
+            <h2>🤸</h2>
+            <h3>Sit-ups</h3>
+            <p style='font-size: 12px;'>{}</p>
+            <p style='font-weight: bold;'>{} reps</p>
+        </div>
+        """.format(badge_situps, laatste_max.get("Sit-ups", 0)), unsafe_allow_html=True)
+    
+    st.write("---")
+    st.subheader("🎯 Badge Levels (Progression)")
+    
+    badge_levels = [
+        (1, "👟 Starter"),
+        (5, "🌱 Groeiend Talent"),
+        (10, "🥈 Sterke Atleet"),
+        (20, "🥇 Kampioen"),
+        (30, "⭐ Elite Krijger"),
+        (40, "🏆 Legendarisch"),
+        (50, "🚀 Superhuman"),
+        (60, "💪 Iron Giant"),
+        (70, "🔥 Beast Mode"),
+        (80, "👑 Koning der Kracht"),
+        (90, "⚔️ Onstopbare Krijger"),
+        (100, "👑 Titanium God"),
+    ]
+    
+    for reps, badge_name in badge_levels:
+        st.write(f"**{reps}+ reps:** {badge_name}")
+
+# TAB 9: ACCOUNT & DOELEN
 with tab_account:
-    st.subheader("⚙️ Accountinstellingen")
-    with st.form("account_form"):
-        u_email = st.text_input("E-mailadres", value=u_data["email"])
-        u_pass = st.text_input("Wachtwoord", value=u_data["password"])
-        try:
-            birthdate_value = datetime.datetime.strptime(u_data["geboortedatum"], "%Y-%m-%d").date() if u_data["geboortedatum"] else datetime.date(2000, 1, 1)
-        except:
-            birthdate_value = datetime.date(2000, 1, 1)
-        u_birthdate = st.date_input("Geboortedatum", value=birthdate_value)
-        u_weight = st.number_input("Gewicht (kg)", min_value=30.0, value=u_data["gewicht"])
-        u_height = st.number_input("Lengte (cm)", min_value=100, value=u_data["lengte"])
-        u_freq = st.selectbox("Sportfrequentie", ["Niet (0 dagen)", "Licht (1-2 dagen)", "Gemiddeld (3-4 dagen)", "Zwaar (5-7 dagen)"], index=2)
-        u_goal = st.selectbox("Doel", ["Afvallen (Cutten)", "Steady blijven (Maintain)", "Lean worden (Lean bulk)", "Nulken (Bulken)"], index=2)
-        
-        if st.form_submit_button("Sla profiel permanent op"):
-            update_user_db(username, {
-                "email": u_email, 
-                "password": u_pass, 
-                "geboortedatum": u_birthdate.strftime("%Y-%m-%d"),
-                "gewicht": u_weight, 
-                "lengte": u_height, 
-                "sport_frequentie": u_freq, 
-                "doel": u_goal
-            })
-            st.success("✅ Wijzigingen opgeslagen!")
-            st.rerun()
+    col_acc, col_doelen = st.columns(2)
+    
+    with col_acc:
+        st.subheader("⚙️ Accountinstellingen")
+        with st.form("account_form"):
+            u_email = st.text_input("E-mailadres", value=u_data["email"])
+            u_pass = st.text_input("Wachtwoord", value=u_data["password"])
+            try:
+                birthdate_value = datetime.datetime.strptime(u_data["geboortedatum"], "%Y-%m-%d").date() if u_data["geboortedatum"] else datetime.date(2000, 1, 1)
+            except:
+                birthdate_value = datetime.date(2000, 1, 1)
+            u_birthdate = st.date_input("Geboortedatum", value=birthdate_value)
+            u_weight = st.number_input("Gewicht (kg)", min_value=30.0, value=u_data["gewicht"])
+            u_height = st.number_input("Lengte (cm)", min_value=100, value=u_data["lengte"])
+            
+            if st.form_submit_button("💾 Sla profiel op"):
+                update_user_db(username, {
+                    "email": u_email, 
+                    "password": u_pass, 
+                    "geboortedatum": u_birthdate.strftime("%Y-%m-%d"),
+                    "gewicht": u_weight, 
+                    "lengte": u_height
+                })
+                st.success("✅ Wijzigingen opgeslagen!")
+                st.rerun()
+    
+    with col_doelen:
+        st.subheader("🎯 Jouw Doelen")
+        with st.form("goals_form"):
+            u_freq = st.selectbox("Sportfrequentie", ["Niet (0 dagen)", "Licht (1-2 dagen)", "Gemiddeld (3-4 dagen)", "Zwaar (5-7 dagen)"], index=["Niet (0 dagen)", "Licht (1-2 dagen)", "Gemiddeld (3-4 dagen)", "Zwaar (5-7 dagen)"].index(u_data["sport_frequentie"]))
+            u_goal = st.selectbox("Doel", ["Afvallen (Cutten)", "Steady blijven (Maintain)", "Lean worden (Lean bulk)", "Nulken (Bulken)"], index=["Afvallen (Cutten)", "Steady blijven (Maintain)", "Lean worden (Lean bulk)", "Nulken (Bulken)"].index(u_data["doel"]))
+            
+            st.info(f"📊 **Jouw TDEE:** ~{int(tdee)} calorieën/dag")
+            st.info(f"🎯 **Doel calorieën:** {doel_calorieen} calorieën/dag")
+            st.info(f"💧 **Water doel:** {water_doel} liter/dag")
+            
+            if st.form_submit_button("💾 Sla doelen op"):
+                update_user_db(username, {
+                    "sport_frequentie": u_freq, 
+                    "doel": u_goal
+                })
+                st.success("✅ Doelen opgeslagen!")
+                st.rerun()
     
     st.write("---")
     st.subheader("🚨 Account Reset")
@@ -935,7 +987,7 @@ with tab_account:
         st.balloons()
         st.rerun()
 
-# TAB 9: LEADERBOARD
+# TAB 10: LEADERBOARD
 with tab_leaderboard:
     st.subheader("🏆 GigaChad Fitness Leaderboard")
     st.write("---")

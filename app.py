@@ -798,37 +798,8 @@ with tab_progress:
         st.rerun()
 
 # TAB 8: BADGES
-with open("badge_data.json", "r") as f:
-    badge_levels = [
-    (1, "👟 Starter"),
-    (5, "🌱 Groeiend Talent"),
-    (10, "🥈 Sterke Atleet"),
-    (20, "🥇 Kampioen"),
-    (30, "⭐ Elite Krijger"),
-    (40, "🏆 Legendarisch"),
-    (50, "🚀 Superhuman"),
-    (60, "💪 Iron Giant"),
-    (70, "🔥 Beast Mode"),
-    (80, "👑 Koning der Kracht"),
-    (90, "⚔️ Onstopbare Krijger"),
-    (100, "👑 Titanium God"),
-]
-
-def get_all_badges(reps):
-    earned_badges = []
-
-    for required_reps, badge_name in badge_levels:
-        if reps >= required_reps:
-            earned_badges.append(badge_name)
-
-    return earned_badges
-
-
 # TAB 8: BADGES
 with tab_badges:
-    # TAB 8: BADGES
-with tab_badges:
-
     badge_levels = [
         (1, "👟 Starter"),
         (5, "🌱 Groeiend Talent"),

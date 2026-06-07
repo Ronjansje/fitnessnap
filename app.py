@@ -517,29 +517,27 @@ with tab_dash:
 with tab_food:
     st.subheader("📸 AI Voedsel Foto Scanner")
     
-    col_scan1, col_scan2 = st.columns(2)
-    
     with col_scan1:
-        st.write("### 📤 Upload Foto")
-        upload_file = st.file_uploader("Kies een foto van je maaltijd...", type=["jpg", "jpeg", "png"])
-        
+    st.write("### 📤 Upload Foto")
+    upload_file = st.file_uploader("Kies een foto van je maaltijd...", type=["jpg", "jpeg", "png"])
+
     if upload_file is not None:
-    image = Image.open(upload_file)
-    st.image(image, width=300)
+        image = Image.open(upload_file)
+        st.image(image, width=300)
 
-    analysis = analyze_food_image(image)
+        analysis = analyze_food_image(image)
 
-    st.success(f"**{analysis['food_type']}** - Betrouwbaarheid: {analysis['confidence']}%")
-    st.write(f"**Calorieën:** {analysis['calories']} kcal")
-    st.write(f"**Eiwit:** {analysis['protein_g']}g | **Koolhydraten:** {analysis['carbs_g']}g | **Vet:** {analysis['fat_g']}g")
+        st.success(f"**{analysis['food_type']}** - Betrouwbaarheid: {analysis['confidence']}%")
+        st.write(f"**Calorieën:** {analysis['calories']} kcal")
+        st.write(f"**Eiwit:** {analysis['protein_g']}g | **Koolhydraten:** {analysis['carbs_g']}g | **Vet:** {analysis['fat_g']}g")
 
-    if st.button("➕ Voeg deze maaltijd toe"):
-        new_logged_calories = logged_calories + analysis['calories']
-        update_user_db(username, {
-            "logged_calories": new_logged_calories
-        })
-        st.success("✅ Maaltijd opgeslagen in cloud database!")
-        st.rerun()
+        if st.button("➕ Voeg deze maaltijd toe"):
+            new_logged_calories = logged_calories + analysis['calories']
+            update_user_db(username, {
+                "logged_calories": new_logged_calories
+            })
+            st.success("✅ Maaltijd opgeslagen in cloud database!")
+            st.rerun()
 
     
     with col_scan2:

@@ -538,9 +538,9 @@ def scan_barcode_from_image(image):
     return decoded[0].data.decode("utf-8")
   
 
-            st.success(f"**{analysis['food_type']}** - Betrouwbaarheid: {analysis['confidence']}%")
-            st.write(f"**Calorieën:** {analysis['calories']} kcal")
-            st.write(f"**Eiwit:** {analysis['protein_g']}g | **Koolhydraten:** {analysis['carbs_g']}g | **Vet:** {analysis['fat_g']}g")
+        st.success(f"**{analysis['food_type']}** - Betrouwbaarheid: {analysis['confidence']}%")
+        st.write(f"**Calorieën:** {analysis['calories']} kcal")
+        st.write(f"**Eiwit:** {analysis['protein_g']}g | **Koolhydraten:** {analysis['carbs_g']}g | **Vet:** {analysis['fat_g']}g")
             
             if st.button("➕ Voeg deze maaltijd toe"):
                 new_logged_calories = logged_calories + analysis['calories']

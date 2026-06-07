@@ -799,102 +799,133 @@ with tab_progress:
 
 # TAB 8: BADGES
 with tab_badges:
-    st.subheader("🏅 Jouw Badge Collectie")
-    st.write("Verzamel badges door je trainingsrecords op te voeren!")
-    
-    st.write("---")
-    
-    # Haal latest records
-    laatste_max = max_history[-1] if max_history else {"Chin-ups": 5, "Push-ups": 20, "Pistol Squats": 5, "Sit-ups": 15}
-    
-    # Display badges in grid
-    col_b1, col_b2, col_b3, col_b4 = st.columns(4)
-    
-    with col_b1:
-        badge_chinups = get_badge(laatste_max.get("Chin-ups", 0))
-        st.markdown("""
-        <div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px;'>
-            <h2>🔗</h2>
-            <h3>Chin-ups</h3>
-            <p style='font-size: 12px;'>{}</p>
-            <p style='font-weight: bold;'>{} reps</p>
-        </div>
-        """.format(badge_chinups, laatste_max.get("Chin-ups", 0)), unsafe_allow_html=True)
-    
-    with col_b2:
-        badge_pushups = get_badge(laatste_max.get("Push-ups", 0))
-        st.markdown("""
-        <div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 10px;'>
-            <h2>👊</h2>
-            <h3>Push-ups</h3>
-            <p style='font-size: 12px;'>{}</p>
-            <p style='font-weight: bold;'>{} reps</p>
-        </div>
-        """.format(badge_pushups, laatste_max.get("Push-ups", 0)), unsafe_allow_html=True)
-    
-    with col_b3:
-        badge_pistol = get_badge(laatste_max.get("Pistol Squats", 0))
-        st.markdown("""
-        <div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border-radius: 10px;'>
-            <h2>🦵</h2>
-            <h3>Pistol Squats</h3>
-            <p style='font-size: 12px;'>{}</p>
-            <p style='font-weight: bold;'>{} reps</p>
-        </div>
-        """.format(badge_pistol, laatste_max.get("Pistol Squats", 0)), unsafe_allow_html=True)
-    
-    with col_b4:
-        badge_situps = get_badge(laatste_max.get("Sit-ups", 0))
-        st.markdown("""
-        <div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); border-radius: 10px;'>
-            <h2>🤸</h2>
-            <h3>Sit-ups</h3>
-            <p style='font-size: 12px;'>{}</p>
-            <p style='font-weight: bold;'>{} reps</p>
-        </div>
-        """.format(badge_situps, laatste_max.get("Sit-ups", 0)), unsafe_allow_html=True)
-    
-    st.write("---")
-    st.subheader("🎯 Badge Levels (Progression)")
-    
-    badge_levels = [
-        (1, "👟 Starter"),
-        (5, "🌱 Groeiend Talent"),
-        (10, "🥈 Sterke Atleet"),
-        (20, "🥇 Kampioen"),
-        (30, "⭐ Elite Krijger"),
-        (40, "🏆 Legendarisch"),
-        (50, "🚀 Superhuman"),
-        (60, "💪 Iron Giant"),
-        (70, "🔥 Beast Mode"),
-        (80, "👑 Koning der Kracht"),
-        (90, "⚔️ Onstopbare Krijger"),
-        (100, "👑 Titanium God"),
-    ]
-    
-    for reps, badge_name in badge_levels:
-        st.write(f"**{reps}+ reps:** {badge_name}")
+   # --- NIEUW BADGE SYSTEM ---
+badge_levels = [
+    (1, "👟 Starter"),
+    (5, "🌱 Groeiend Talent"),
+    (10, "🥈 Sterke Atleet"),
+    (20, "🥇 Kampioen"),
+    (30, "⭐ Elite Krijger"),
+    (40, "🏆 Legendarisch"),
+    (50, "🚀 Superhuman"),
+    (60, "💪 Iron Giant"),
+    (70, "🔥 Beast Mode"),
+    (80, "👑 Koning der Kracht"),
+    (90, "⚔️ Onstopbare Krijger"),
+    (100, "👑 Titanium God"),
+]
 
+def get_all_badges(reps):
+    earned_badges = []
+
+    for required_reps, badge_name in badge_levels:
+        if reps >= required_reps:
+            earned_badges.append(badge_name)
+
+    return earned_badges
+
+
+# TAB 8: BADGES
+with tab_badges:
+    st.subheader("🏅 Jouw Badge Collectie")
+    st.write("Verdien badges door sterker te worden en behoud AL je oude badges!")
+
+    st.write("---")
+
+    laatste_max = max_history[-1] if max_history else {
+        "Chin-ups": 5,
+        "Push-ups": 20,
+        "Pistol Squats": 5,
+        "Sit-ups": 15
+    }
+
+    oefeningen = [
+        {
+            "naam": "Chin-ups",
+            "emoji": "🔗",
+            "reps": laatste_max.get("Chin-ups", 0),
+            "gradient": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+        },
+        {
+            "naam": "Push-ups",
+            "emoji": "👊",
+            "reps": laatste_max.get("Push-ups", 0),
+            "gradient": "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)"
+        },
+        {
+            "naam": "Pistol Squats",
+            "emoji": "🦵",
+            "reps": laatste_max.get("Pistol Squats", 0),
+            "gradient": "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)"
+        },
+        {
+            "naam": "Sit-ups",
+            "emoji": "🤸",
+            "reps": laatste_max.get("Sit-ups", 0),
+            "gradient": "linear-gradient(135deg, #fa709a 0%, #fee140 100%)"
+        }
+    ]
+
+    cols = st.columns(4)
+
+    for i, oefening in enumerate(oefeningen):
+        with cols[i]:
+
+            badges = get_all_badges(oefening["reps"])
+
+            st.markdown(f"""
+            <div style='
+                text-align: center;
+                padding: 20px;
+                background: {oefening["gradient"]};
+                border-radius: 15px;
+                color: white;
+                min-height: 180px;
+            '>
+                <h1>{oefening["emoji"]}</h1>
+                <h3>{oefening["naam"]}</h3>
+                <p style='font-size:18px; font-weight:bold;'>
+                    {oefening["reps"]} reps
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.write("### 🏅 Behaalde Badges")
+
+            if badges:
+                for badge in badges:
+                    st.success(badge)
+            else:
+                st.info("Nog geen badges")
 
     st.write("---")
     st.subheader("🍔 Eten & Drinken Badges")
 
+    food_badges = []
+
     if logged_calories >= 500:
-        st.success("🥉 Snack Starter Badge")
+        food_badges.append("🥉 Snack Starter Badge")
+
     if logged_calories >= 1500:
-        st.success("🥈 Meal Master Badge")
+        food_badges.append("🥈 Meal Master Badge")
+
     if logged_calories >= 2500:
-        st.success("🥇 Calorie King Badge")
+        food_badges.append("🥇 Calorie King Badge")
 
     if water_intake >= 1:
-        st.success("💧 Hydration Starter")
+        food_badges.append("💧 Hydration Starter")
+
     if water_intake >= 2:
-        st.success("🚰 Water Warrior")
+        food_badges.append("🚰 Water Warrior")
+
     if water_intake >= 3:
-        st.success("🌊 Hydration God")
+        food_badges.append("🌊 Hydration God")
 
-
-    st.write("---")
+    if food_badges:
+        for badge in food_badges:
+            st.success(badge)
+    else:
+        st.info("Nog geen eten/drinken badges")
     # TAB 9: ACCOUNT & DOELEN
 with tab_account:
     col_acc, col_doelen = st.columns(2)

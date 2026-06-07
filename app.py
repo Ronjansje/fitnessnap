@@ -527,8 +527,7 @@ with tab_food:
             image = Image.open(upload_file)
             st.image(image, width=300)
             analysis = analyze_food_image(image)
-
-   def scan_barcode_from_image(image):
+def scan_barcode_from_image(image):
     """Leest barcode uit een foto (camera of upload)"""
     img = image.convert("RGB")
     decoded = decode(img)
@@ -537,6 +536,7 @@ with tab_food:
         return None
 
     return decoded[0].data.decode("utf-8")
+  
 
             st.success(f"**{analysis['food_type']}** - Betrouwbaarheid: {analysis['confidence']}%")
             st.write(f"**Calorieën:** {analysis['calories']} kcal")

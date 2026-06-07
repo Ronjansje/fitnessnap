@@ -524,31 +524,23 @@ with tab_food:
         upload_file = st.file_uploader("Kies een foto van je maaltijd...", type=["jpg", "jpeg", "png"])
         
         if upload_file is not None:
-            image = Image.open(upload_file)
-            st.image(image, width=300)
-            analysis = analyze_food_image(image)
-def scan_barcode_from_image(image):
-    """Leest barcode uit een foto (camera of upload)"""
-    img = image.convert("RGB")
-    decoded = decode(img)
+    image = Image.open(upload_file)
+    st.image(image, width=300)
 
-    if not decoded:
-        return None
+    analysis = analyze_food_image(image)
 
-    return decoded[0].data.decode("utf-8")
-  
+    st.success(f"**{analysis['food_type']}** - Betrouwbaarheid: {analysis['confidence']}%")
+    st.write(f"**Calorieën:** {analysis['calories']} kcal")
+    st.write(f"**Eiwit:** {analysis['protein_g']}g | **Koolhydraten:** {analysis['carbs_g']}g | **Vet:** {analysis['fat_g']}g")
 
-        st.success(f"**{analysis['food_type']}** - Betrouwbaarheid: {analysis['confidence']}%")
-        st.write(f"**Calorieën:** {analysis['calories']} kcal")
-        st.write(f"**Eiwit:** {analysis['protein_g']}g | **Koolhydraten:** {analysis['carbs_g']}g | **Vet:** {analysis['fat_g']}g")
-            
-            if st.button("➕ Voeg deze maaltijd toe"):
-                new_logged_calories = logged_calories + analysis['calories']
-                update_user_db(username, {
-                    "logged_calories": new_logged_calories
-                })
-                st.success("✅ Maaltijd opgeslagen in cloud database!")
-                st.rerun()
+    if st.button("➕ Voeg deze maaltijd toe"):
+        new_logged_calories = logged_calories + analysis['calories']
+        update_user_db(username, {
+            "logged_calories": new_logged_calories
+        })
+        st.success("✅ Maaltijd opgeslagen in cloud database!")
+        st.rerun()
+
     
     with col_scan2:
         st.write("### 📱 Maak Foto Direct")

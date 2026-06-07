@@ -106,6 +106,28 @@ def init_db():
 init_db()
 
 # --- HULPFUNCTIES ---
+import requests
+
+def smart_barcode_lookup(barcode: str):
+    url = f"https://world.openfoodfacts.org/api/v0/product/{barcode}.json"
+    resp = requests.get(url, timeout=5).json()
+
+    if resp.get("status") != 1:
+        return None
+
+    p = resp["product"]
+    nutr = p.get("nutriments", {})
+
+    return {
+        "name": p.get("product_name", "Onbekend product"),
+        "brand": p.get("brands", "Onbekend merk"),
+        "kcal_100g": nutr.get("energy-kcal_100g"),
+        "fat": nutr.get("fat_100g"),
+        "carbs": nutr.get("carbohydrates_100g"),
+        "protein": nutr.get("proteins_100g"),
+        "image": p.get("image_front_url")
+    }
+
 def calculate_age(birthdate_str):
     """Bereken leeftijd uit geboortedatum (formaat: YYYY-MM-DD)"""
     try:
@@ -460,13 +482,7 @@ with tab_dash:
         st.info("Nog geen krachtvoortgang. Voeg metingen toe!")
 
 
-# --- BARCODE DATABASE ---
-BARCODE_DB = {
-    "5449000000996": {"naam": "Coca-Cola", "calories": 140},
-    "8710398501514": {"naam": "Lay's Chips", "calories": 535},
-    "3017620422003": {"naam": "Nutella", "calories": 539},
-    "8710400131470": {"naam": "Red Bull", "calories": 110},
-}
+
 
 # TAB 2: INSTANT FOTO SCANNER
 with tab_food:
@@ -537,24 +553,27 @@ with tab_food:
 
 
         st.write("---")
-        st.write("### 📦 Barcode Scanner")
         barcode = st.text_input("Scan of vul barcode in")
-        
-        if barcode:
-            if barcode in BARCODE_DB:
-                product = BARCODE_DB[barcode]
-                st.success(f"Gevonden: {product['naam']}")
-                st.write(f"Calorieën: {product['calories']} kcal")
-                
-                if st.button("➕ Voeg barcode product toe"):
-                    new_logged_calories = logged_calories + product['calories']
-                    update_user_db(username, {
-                        "logged_calories": new_logged_calories
-                    })
-                    st.success("✅ Product toegevoegd!")
-                    st.rerun()
-            else:
-                st.warning("❌ Product niet gevonden in database")
+
+if barcode:
+    product = smart_barcode_lookup(barcode)
+
+    if product:
+        st.success(f"{product['name']} ({product['brand']})")
+        st.write(f"Calorieën: {product['kcal_100g']} kcal per 100g")
+        st.write(f"Eiwit: {product['protein']}g | Koolhydraten: {product['carbs']}g | Vet: {product['fat']}g")
+
+        if product["image"]:
+            st.image(product["image"], width=200)
+
+        if st.button("➕ Voeg barcode product toe"):
+            update_user_db(username, {
+                "logged_calories": logged_calories + int(product['kcal_100g'])
+            })
+            st.success("Product toegevoegd!")
+            st.rerun()
+    else:
+        st.error("❌ Product niet gevonden in OpenFoodFacts")
 
 # TAB 3: WATER TRACKER
 with tab_water:

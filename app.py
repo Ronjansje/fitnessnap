@@ -517,7 +517,7 @@ with tab_dash:
 with tab_food:
     st.subheader("📸 AI Voedsel Foto Scanner")
     
-    with col_scan1:
+with col_scan1:
     st.write("### 📤 Upload Foto")
     upload_file = st.file_uploader("Kies een foto van je maaltijd...", type=["jpg", "jpeg", "png"])
 

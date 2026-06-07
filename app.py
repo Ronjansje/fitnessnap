@@ -8,6 +8,7 @@ from PIL import Image
 import base64
 import io
 import numpy as np
+from pyzbar.pyzbar import decode
 
 # --- CONFIGURATIE EN STYLING ---
 st.set_page_config(page_title="GigaChad Ultra Fitness", page_icon="🗿", layout="wide")
@@ -526,9 +527,8 @@ with tab_food:
             image = Image.open(upload_file)
             st.image(image, width=300)
             analysis = analyze_food_image(image)
- from pyzbar.pyzbar import decode
 
-def scan_barcode_from_image(image):
+    def scan_barcode_from_image(image):
     """Leest barcode uit een foto (camera of upload)"""
     img = image.convert("RGB")
     decoded = decode(img)

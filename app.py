@@ -523,7 +523,7 @@ with tab_food:
         st.write("### 📤 Upload Foto")
         upload_file = st.file_uploader("Kies een foto van je maaltijd...", type=["jpg", "jpeg", "png"])
         
-        if upload_file is not None:
+    if upload_file is not None:
     image = Image.open(upload_file)
     st.image(image, width=300)
 

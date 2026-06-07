@@ -108,12 +108,40 @@ init_db()
 # --- HULPFUNCTIES ---
 import requests
 
-def smart_barcode_lookup(barcode: str):
-    url = f"https://world.openfoodfacts.org/api/v0/product/{barcode}.json"
-    resp = requests.get(url, timeout=5).json()
+import requests
 
+def smart_barcode_lookup(barcode: str):
+    """Veilige barcode lookup met JSON fallback om crashes te voorkomen"""
+    url = f"https://world.openfoodfacts.org/api/v0/product/{barcode}.json"
+
+    try:
+        response = requests.get(url, timeout=5)
+    except Exception:
+        return None
+
+    # Probeer JSON te lezen, maar voorkom crash
+    try:
+        resp = response.json()
+    except ValueError:
+        return None
+
+    # Check of product bestaat
     if resp.get("status") != 1:
         return None
+
+    p = resp.get("product", {})
+    nutr = p.get("nutriments", {})
+
+    return {
+        "name": p.get("product_name", "Onbekend product"),
+        "brand": p.get("brands", "Onbekend merk"),
+        "kcal_100g": nutr.get("energy-kcal_100g"),
+        "fat": nutr.get("fat_100g"),
+        "carbs": nutr.get("carbohydrates_100g"),
+        "protein": nutr.get("proteins_100g"),
+        "image": p.get("image_front_url")
+    }
+
 
     p = resp["product"]
     nutr = p.get("nutriments", {})

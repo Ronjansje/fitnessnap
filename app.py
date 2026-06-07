@@ -799,7 +799,6 @@ with tab_progress:
 
 # TAB 8: BADGES
 with tab_badges:
-   # --- NIEUW BADGE SYSTEM ---
 badge_levels = [
     (1, "👟 Starter"),
     (5, "🌱 Groeiend Talent"),

@@ -175,6 +175,14 @@ def reset_account(username):
 if "user_session" not in st.session_state:
     st.session_state.user_session = None
 
+
+# --- LOGIN PERSISTENTIE ---
+if "remembered_user" not in st.session_state:
+    st.session_state.remembered_user = None
+
+if st.session_state.remembered_user and st.session_state.user_session is None:
+    st.session_state.user_session = st.session_state.remembered_user
+
 # --- SCHERM 1: RECON / INLOGGEN / REGISTREREN ---
 if st.session_state.user_session is None:
     st.title("🔒 GigaChad Fitness - Inloggen of Registreren")
@@ -192,6 +200,7 @@ if st.session_state.user_session is None:
                 db_user = get_user(user_input)
                 if db_user and db_user["password"] == pass_input:
                     st.session_state.user_session = user_input
+                    st.session_state.remembered_user = user_input
                     st.success("Succesvol ingelogd! Je gegevens worden ingeladen...")
                     st.rerun()
                 else:
@@ -402,8 +411,8 @@ def get_sleep_tips(hours, quality, awake_count=0):
     return tips
 
 # --- HOOFDMENU TABS ---
-tab_dash, tab_food, tab_water, tab_kaak, tab_schema, tab_progress, tab_sleep, tab_badges, tab_account, tab_leaderboard = st.tabs([
-    "📊 Dashboard", "📸 Foto Scanner", "💧 Water Tracker", "🗿 Kaaklijn Trainer", "🏋️ Trainingsschema", "📈 Voortgang & Metingen", "😴 Slaap Tracker", "🏅 Badges", "⚙️ Account", "🏆 Leaderboard"
+tab_dash, tab_food, tab_water, tab_schema, tab_progress, tab_badges, tab_account, tab_leaderboard = st.tabs([
+    "📊 Dashboard", "📸 Foto Scanner", "💧 Water Tracker", "🏋️ Trainingsschema", "📈 Voortgang & Metingen", "🏅 Badges", "⚙️ Account", "🏆 Leaderboard"
 ])
 
 # TAB 1: DASHBOARD
@@ -416,9 +425,9 @@ with tab_dash:
         st.metric(label="💧 Water Status", value=f"{water_intake} / {water_doel} L")
         st.progress(min(1.0, water_intake / max(0.1, water_doel)))
     with col3:
-        st.metric(label="🔥 Kaaklijn Streak", value=f"{u_data['streak']} Dagen")
-    with col4:
         st.metric(label="⚡ Workout Streak", value=f"{u_data['workout_streak']} Dagen")
+    with col4:
+        st.metric(label="🍔 Food Items", value=f"{logged_calories} kcal")
 
     st.write("---")
     
@@ -449,6 +458,15 @@ with tab_dash:
         st.line_chart(df_max.set_index("Datum") if "Datum" in df_max.columns else df_max)
     else:
         st.info("Nog geen krachtvoortgang. Voeg metingen toe!")
+
+
+# --- BARCODE DATABASE ---
+BARCODE_DB = {
+    "5449000000996": {"naam": "Coca-Cola", "calories": 140},
+    "8710398501514": {"naam": "Lay's Chips", "calories": 535},
+    "3017620422003": {"naam": "Nutella", "calories": 539},
+    "8710400131470": {"naam": "Red Bull", "calories": 110},
+}
 
 # TAB 2: INSTANT FOTO SCANNER
 with tab_food:
@@ -504,7 +522,7 @@ with tab_food:
         st.write("---")
         st.write("### 📝 Handmatig Invoeren")
         manual_calories = st.number_input("Calorieën", min_value=0, value=0)
-        manual_type = st.selectbox("Voedseltype", ["🥩 Vlees/Eiwit", "🥗 Groenten", "🍚 Koolhydraten", "🥜 Noten/Olie", "🍕 Snacks", "Overig"])
+        manual_type = st.selectbox("Voedseltype", ["🥩 Vlees/Eiwit", "🥗 Groenten", "🍚 Koolhydraten", "🥜 Noten/Olie", "🥤 Frisdrank", "🍕 Snacks", "Overig"])
         
         if st.button("➕ Voeg handmatig voedsel toe"):
             if manual_calories > 0:
@@ -516,6 +534,27 @@ with tab_food:
                 st.rerun()
             else:
                 st.warning("Voer calorieën in!")
+
+
+        st.write("---")
+        st.write("### 📦 Barcode Scanner")
+        barcode = st.text_input("Scan of vul barcode in")
+        
+        if barcode:
+            if barcode in BARCODE_DB:
+                product = BARCODE_DB[barcode]
+                st.success(f"Gevonden: {product['naam']}")
+                st.write(f"Calorieën: {product['calories']} kcal")
+                
+                if st.button("➕ Voeg barcode product toe"):
+                    new_logged_calories = logged_calories + product['calories']
+                    update_user_db(username, {
+                        "logged_calories": new_logged_calories
+                    })
+                    st.success("✅ Product toegevoegd!")
+                    st.rerun()
+            else:
+                st.warning("❌ Product niet gevonden in database")
 
 # TAB 3: WATER TRACKER
 with tab_water:
@@ -549,48 +588,6 @@ with tab_water:
             new_water = round(water_intake + (custom_water / 1000), 2)
             update_user_db(username, {"water_intake": new_water})
             st.rerun()
-
-# TAB 4: KAAKLIJN TRAINER
-with tab_kaak:
-    st.subheader("🗿 Dagelijkse Kaaklijn Training")
-    kaaklijn_oefeningen = [
-        {"naam": "Mewing Mastery", "uitleg": "Druk je hele tong plat tegen het gehemelte. Houd 60 seconden vast en focus op je volle gehemelte.", "duration": 60},
-        {"naam": "Chin Annihilation", "uitleg": "Trek je kin recht naar achteren alsof je een dubbele kin maakt. 30 reps, EXPLOSIEF!", "duration": 30},
-        {"naam": "Jawline Apocalypse", "uitleg": "Kijk naar het plafond en duw je onderkaak naar voren. 50 REPS - NO MERCY!", "duration": 45}
-    ]
-    oefening = kaaklijn_oefeningen[vandaag_datum.day % len(kaaklijn_oefeningen)]
-    st.info(f"**Oefening van vandaag:** {oefening['naam']}")
-    st.write(oefening['uitleg'])
-    
-    st.write("---")
-    st.subheader("⏱️ Timer & Uitvoering")
-    
-    if st.button("▶️ Start Training Timer"):
-        st.session_state.timer_active = True
-    
-    if st.session_state.get("timer_active", False):
-        placeholder = st.empty()
-        for remaining in range(oefening['duration'], 0, -1):
-            with placeholder.container():
-                progress_value = 1 - (remaining / oefening['duration'])
-                st.progress(progress_value)
-                st.metric("⏱️ Tijd Resterend", f"{remaining} seconden")
-            time.sleep(1)
-        
-        with placeholder.container():
-            st.progress(1.0)
-            st.success("✅ Training voltooid!")
-        st.session_state.timer_active = False
-    
-    st.write("---")
-    if st.button("✅ Kaaklijntraining afgerond!"):
-        if u_data["last_jaw_date"] != str(vandaag_datum):
-            nieuwe_streak = u_data["streak"] + 1
-            update_user_db(username, {"streak": nieuwe_streak, "last_jaw_date": str(vandaag_datum)})
-            st.success("🔥 Database geüpdatet! Streak verhoogd!")
-            st.rerun()
-        else: 
-            st.warning("Je hebt vandaag al getraind!")
 
 # TAB 5: TRAININGSSCHEMA
 with tab_schema:
@@ -800,147 +797,6 @@ with tab_progress:
         st.success("✅ Metingen permanent opgeslagen!")
         st.rerun()
 
-# TAB 7: SLAAP TRACKER MET BEWEGINGSDETECTIE
-with tab_sleep:
-    st.subheader("😴 Slaap Tracker & Automatische Bewegingsdetectie")
-    
-    col_s1, col_s2 = st.columns(2)
-    
-    with col_s1:
-        st.write("### ⏰ Slaap Sessie")
-        st.info("📱 Zet je telefoon op je nachtkasjte. De app detecteert beweging automatisch!")
-        
-        # Start/Stop sessie
-        if not st.session_state.get("sleep_session_active", False):
-            if st.button("🌙 Start Slaap Sessie", key="start_sleep"):
-                st.session_state.sleep_session_active = True
-                st.session_state.sleep_start_time = datetime.datetime.now()
-                st.session_state.awake_count = 0
-                st.session_state.movement_data = []
-                st.rerun()
-        else:
-            st.success("✅ Slaap sessie actief!")
-            start_time = st.session_state.sleep_start_time
-            elapsed = (datetime.datetime.now() - start_time).total_seconds() / 3600
-            st.metric("⏱️ Slaapuren", f"{elapsed:.1f} uur")
-            st.metric("🚨 Keren wakker gedetecteerd", st.session_state.awake_count)
-            
-            if st.button("⏹️ Stop Slaap Sessie", key="stop_sleep"):
-                # Bereken slaapgegevens
-                sleep_hours = (datetime.datetime.now() - st.session_state.sleep_start_time).total_seconds() / 3600
-                
-                st.write("---")
-                st.subheader("📊 Evalueer je slaapkwaliteit")
-                sleep_quality = st.slider("Hoe was je slaapkwaliteit? (1-5)", 1, 5, 3)
-                awake_count = st.session_state.awake_count
-                
-                if st.button("💾 Sla slaaprecord op"):
-                    sleep_entry = add_sleep_record_with_movement(sleep_hours, sleep_quality, awake_count)
-                    st.success(f"✅ Slaaprecord opgeslagen!")
-                    st.info(f"**Sleep Score:** {sleep_entry['score']}/100")
-                    st.info(f"**Keren wakker:** {awake_count}")
-                    st.session_state.sleep_session_active = False
-                    st.rerun()
-    
-    with col_s2:
-        st.write("### 📋 Bewegingsdetectie")
-        st.info("🔴 **LIVE BEWEGINGSMONITOR** (Simulatie)")
-        
-        if st.session_state.get("sleep_session_active", False):
-            # Simuleer bewegingsdetectie
-            st.write("**Status:** Luistert naar beweging...")
-            
-            # Simuleer willekeurige bewegingsdetecties
-            movement_placeholder = st.empty()
-            
-            # Fake sensor data simulatie
-            import random
-            movement_events = []
-            
-            col_m1, col_m2 = st.columns(2)
-            with col_m1:
-                if st.button("➕ Beweging Gedetecteerd", key="manual_movement"):
-                    st.session_state.awake_count += 1
-                    st.session_state.movement_data.append({
-                        "timestamp": datetime.datetime.now(),
-                        "intensity": random.randint(50, 100)
-                    })
-                    st.rerun()
-            
-            with col_m2:
-                if st.button("🔄 Vernieuwen", key="refresh_movement"):
-                    # Kans van 20% dat beweging wordt gedetecteerd
-                    if random.random() < 0.2:
-                        st.session_state.awake_count += 1
-                        st.session_state.movement_data.append({
-                            "timestamp": datetime.datetime.now(),
-                            "intensity": random.randint(50, 100)
-                        })
-                    st.rerun()
-            
-            if st.session_state.movement_data:
-                st.write("**Bewegingen deze nacht:**")
-                for i, event in enumerate(st.session_state.movement_data[-5:], 1):
-                    st.write(f"  {i}. {event['timestamp'].strftime('%H:%M:%S')} - Intensiteit: {event['intensity']}%")
-        else:
-            st.info("ℹ️ Start een slaapsessie om bewegingsdetectie in te schakelen")
-        
-        st.write("---")
-        st.subheader("💡 Slaap Tips")
-        if sleep_history:
-            latest_sleep = sleep_history[-1]
-            tips = get_sleep_tips(latest_sleep['uren'], latest_sleep['kwaliteit'], latest_sleep.get('keren_wakker', 0))
-            for tip in tips:
-                st.info(tip)
-        else:
-            st.info("📊 Log je slaap om persoonlijke tips te krijgen!")
-    
-    st.write("---")
-    st.subheader("📊 Slaap Voortgang")
-    
-    if sleep_history:
-        df_sleep = pd.DataFrame(sleep_history)
-        
-        col_s_chart1, col_s_chart2 = st.columns(2)
-        
-        with col_s_chart1:
-            st.write("### Slaapuren per nacht")
-            sleep_data = df_sleep[['datum', 'uren']].rename(columns={'datum': 'Datum', 'uren': 'Uren'})
-            st.line_chart(sleep_data.set_index('Datum'))
-        
-        with col_s_chart2:
-            st.write("### Slaapkwaliteit")
-            quality_data = df_sleep[['datum', 'kwaliteit']].rename(columns={'datum': 'Datum', 'kwaliteit': 'Kwaliteit (1-5)'})
-            st.line_chart(quality_data.set_index('Datum'))
-        
-        col_s_stat1, col_s_stat2, col_s_stat3 = st.columns(3)
-        
-        with col_s_stat1:
-            avg_sleep = df_sleep['uren'].mean()
-            st.metric("Gemiddelde slaap", f"{avg_sleep:.1f} uren per nacht")
-        
-        with col_s_stat2:
-            avg_quality = df_sleep['kwaliteit'].mean()
-            st.metric("Gemiddelde kwaliteit", f"{avg_quality:.1f}/5")
-        
-        with col_s_stat3:
-            avg_awake = df_sleep['keren_wakker'].mean()
-            st.metric("Gem. keren wakker", f"{avg_awake:.1f} x")
-        
-        st.write("---")
-        
-        if avg_sleep < 6:
-            st.warning("⚠️ Je slaapt gemiddeld minder dan 6 uur. Dit kan je herstel beïnvloeden!")
-        elif avg_sleep > 9:
-            st.warning("⚠️ Je slaapt gemiddeld meer dan 9 uur. Probeer dit aan te passen.")
-        else:
-            st.success("✅ Je slaapt gemiddeld goed!")
-        
-        if avg_awake > 3:
-            st.warning("⚠️ Je wordt gemiddeld meer dan 3 keer wakker. Probeer rustiger omgeving.")
-    else:
-        st.info("📝 Start met het loggen van je slaap voor analyses!")
-
 # TAB 8: BADGES
 with tab_badges:
     st.subheader("🏅 Jouw Badge Collectie")
@@ -1019,6 +875,24 @@ with tab_badges:
     for reps, badge_name in badge_levels:
         st.write(f"**{reps}+ reps:** {badge_name}")
 
+
+    st.write("---")
+    st.subheader("🍔 Eten & Drinken Badges")
+
+    if logged_calories >= 500:
+        st.success("🥉 Snack Starter Badge")
+    if logged_calories >= 1500:
+        st.success("🥈 Meal Master Badge")
+    if logged_calories >= 2500:
+        st.success("🥇 Calorie King Badge")
+
+    if water_intake >= 1:
+        st.success("💧 Hydration Starter")
+    if water_intake >= 2:
+        st.success("🚰 Water Warrior")
+    if water_intake >= 3:
+        st.success("🌊 Hydration God")
+
 # TAB 9: ACCOUNT & DOELEN
 with tab_account:
     col_acc, col_doelen = st.columns(2)
@@ -1083,36 +957,6 @@ with tab_leaderboard:
     all_users = get_all_users()
     
     if all_users:
-        # Jaw Streak Leaderboard
-        st.write("### 🗿 Kaaklijn Streak Kampioen")
-        jaw_data = sorted(all_users, key=lambda x: x["streak"], reverse=True)
-        
-        col_rank, col_user, col_days = st.columns([1, 2, 2])
-        with col_rank:
-            st.write("**Rang**")
-        with col_user:
-            st.write("**Gebruiker**")
-        with col_days:
-            st.write("**Streak (Dagen)**")
-        
-        st.write("---")
-        for idx, user in enumerate(jaw_data[:10], 1):
-            col_rank, col_user, col_days = st.columns([1, 2, 2])
-            with col_rank:
-                if idx == 1:
-                    st.write(f"🥇 #{idx}")
-                elif idx == 2:
-                    st.write(f"🥈 #{idx}")
-                elif idx == 3:
-                    st.write(f"🥉 #{idx}")
-                else:
-                    st.write(f"#{idx}")
-            with col_user:
-                st.write(f"**{user['username']}**")
-            with col_days:
-                st.metric("", f"{user['streak']} 🔥")
-        
-        st.write("---")
         st.write("### ⚡ Workout Streak Kampioen")
         workout_data = sorted(all_users, key=lambda x: x["workout_streak"], reverse=True)
         

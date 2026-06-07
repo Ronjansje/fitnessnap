@@ -526,6 +526,17 @@ with tab_food:
             image = Image.open(upload_file)
             st.image(image, width=300)
             analysis = analyze_food_image(image)
+ from pyzbar.pyzbar import decode
+
+def scan_barcode_from_image(image):
+    """Leest barcode uit een foto (camera of upload)"""
+    img = image.convert("RGB")
+    decoded = decode(img)
+
+    if not decoded:
+        return None
+
+    return decoded[0].data.decode("utf-8")
             
             st.success(f"**{analysis['food_type']}** - Betrouwbaarheid: {analysis['confidence']}%")
             st.write(f"**Calorieën:** {analysis['calories']} kcal")
@@ -581,27 +592,42 @@ with tab_food:
 
 
         st.write("---")
-        barcode = st.text_input("Scan of vul barcode in")
+        st.write("### 📷 Barcode Scanner (camera)")
 
-if barcode:
-    product = smart_barcode_lookup(barcode)
+camera_barcode = st.camera_input("Scan een barcode met je camera")
 
-    if product:
-        st.success(f"{product['name']} ({product['brand']})")
-        st.write(f"Calorieën: {product['kcal_100g']} kcal per 100g")
-        st.write(f"Eiwit: {product['protein']}g | Koolhydraten: {product['carbs']}g | Vet: {product['fat']}g")
+if camera_barcode:
+    img = Image.open(camera_barcode)
+    scanned_code = scan_barcode_from_image(img)
 
-        if product["image"]:
-            st.image(product["image"], width=200)
+    if scanned_code:
+        st.success(f"📦 Barcode gevonden: {scanned_code}")
 
-        if st.button("➕ Voeg barcode product toe"):
-            update_user_db(username, {
-                "logged_calories": logged_calories + int(product['kcal_100g'])
-            })
-            st.success("Product toegevoegd!")
-            st.rerun()
+        product = smart_barcode_lookup(scanned_code)
+
+        if product:
+            st.success(f"{product['name']} ({product['brand']})")
+            st.write(f"Calorieën: {product['kcal_100g']} kcal per 100g")
+            st.write(f"Eiwit: {product['protein']}g | Koolhydraten: {product['carbs']}g | Vet: {product['fat']}g")
+
+            if product["image"]:
+                st.image(product["image"], width=200)
+
+            if st.button("➕ Voeg product toe"):
+                update_user_db(username, {
+                    "logged_calories": logged_calories + int(product['kcal_100g'])
+                })
+                st.success("Product toegevoegd!")
+                st.rerun()
+        else:
+            st.error("❌ Product niet gevonden in OpenFoodFacts")
     else:
-        st.error("❌ Product niet gevonden in OpenFoodFacts")
+        st.error("❌ Geen barcode gevonden in de foto")
+
+st.write("---")
+st.write("### 📥 Handmatig invoeren")
+barcode = st.text_input("Barcode handmatig invullen")
+
 
 # TAB 3: WATER TRACKER
 with tab_water:

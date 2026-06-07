@@ -798,8 +798,8 @@ with tab_progress:
         st.rerun()
 
 # TAB 8: BADGES
-with tab_badges:
-badge_levels = [
+with open("badge_data.json", "r") as f:
+    badge_levels = [
     (1, "👟 Starter"),
     (5, "🌱 Groeiend Talent"),
     (10, "🥈 Sterke Atleet"),

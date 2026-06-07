@@ -827,6 +827,33 @@ def get_all_badges(reps):
 
 # TAB 8: BADGES
 with tab_badges:
+    # TAB 8: BADGES
+with tab_badges:
+
+    badge_levels = [
+        (1, "👟 Starter"),
+        (5, "🌱 Groeiend Talent"),
+        (10, "🥈 Sterke Atleet"),
+        (20, "🥇 Kampioen"),
+        (30, "⭐ Elite Krijger"),
+        (40, "🏆 Legendarisch"),
+        (50, "🚀 Superhuman"),
+        (60, "💪 Iron Giant"),
+        (70, "🔥 Beast Mode"),
+        (80, "👑 Koning der Kracht"),
+        (90, "⚔️ Onstopbare Krijger"),
+        (100, "👑 Titanium God"),
+    ]
+
+    def get_all_badges(reps):
+        earned_badges = []
+
+        for required_reps, badge_name in badge_levels:
+            if reps >= required_reps:
+                earned_badges.append(badge_name)
+
+        return earned_badges
+
     st.subheader("🏅 Jouw Badge Collectie")
     st.write("Verdien badges door sterker te worden en behoud AL je oude badges!")
 
@@ -844,53 +871,36 @@ with tab_badges:
             "naam": "Chin-ups",
             "emoji": "🔗",
             "reps": laatste_max.get("Chin-ups", 0),
-            "gradient": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
         },
         {
             "naam": "Push-ups",
             "emoji": "👊",
             "reps": laatste_max.get("Push-ups", 0),
-            "gradient": "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)"
         },
         {
             "naam": "Pistol Squats",
             "emoji": "🦵",
             "reps": laatste_max.get("Pistol Squats", 0),
-            "gradient": "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)"
         },
         {
             "naam": "Sit-ups",
             "emoji": "🤸",
             "reps": laatste_max.get("Sit-ups", 0),
-            "gradient": "linear-gradient(135deg, #fa709a 0%, #fee140 100%)"
         }
     ]
 
     cols = st.columns(4)
 
     for i, oefening in enumerate(oefeningen):
+
         with cols[i]:
 
-            badges = get_all_badges(oefening["reps"])
-
             st.markdown(f"""
-            <div style='
-                text-align: center;
-                padding: 20px;
-                background: {oefening["gradient"]};
-                border-radius: 15px;
-                color: white;
-                min-height: 180px;
-            '>
-                <h1>{oefening["emoji"]}</h1>
-                <h3>{oefening["naam"]}</h3>
-                <p style='font-size:18px; font-weight:bold;'>
-                    {oefening["reps"]} reps
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+            ### {oefening["emoji"]} {oefening["naam"]}
+            **{oefening["reps"]} reps**
+            """)
 
-            st.write("### 🏅 Behaalde Badges")
+            badges = get_all_badges(oefening["reps"])
 
             if badges:
                 for badge in badges:
@@ -901,31 +911,23 @@ with tab_badges:
     st.write("---")
     st.subheader("🍔 Eten & Drinken Badges")
 
-    food_badges = []
-
     if logged_calories >= 500:
-        food_badges.append("🥉 Snack Starter Badge")
+        st.success("🥉 Snack Starter Badge")
 
     if logged_calories >= 1500:
-        food_badges.append("🥈 Meal Master Badge")
+        st.success("🥈 Meal Master Badge")
 
     if logged_calories >= 2500:
-        food_badges.append("🥇 Calorie King Badge")
+        st.success("🥇 Calorie King Badge")
 
     if water_intake >= 1:
-        food_badges.append("💧 Hydration Starter")
+        st.success("💧 Hydration Starter")
 
     if water_intake >= 2:
-        food_badges.append("🚰 Water Warrior")
+        st.success("🚰 Water Warrior")
 
     if water_intake >= 3:
-        food_badges.append("🌊 Hydration God")
-
-    if food_badges:
-        for badge in food_badges:
-            st.success(badge)
-    else:
-        st.info("Nog geen eten/drinken badges")
+        st.success("🌊 Hydration God")
     # TAB 9: ACCOUNT & DOELEN
 with tab_account:
     col_acc, col_doelen = st.columns(2)

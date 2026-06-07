@@ -893,7 +893,9 @@ with tab_badges:
     if water_intake >= 3:
         st.success("🌊 Hydration God")
 
-# TAB 9: ACCOUNT & DOELEN
+
+    st.write("---")
+    # TAB 9: ACCOUNT & DOELEN
 with tab_account:
     col_acc, col_doelen = st.columns(2)
     
